@@ -16,6 +16,7 @@ import Testing
     #expect(output.contains("connections"))
     #expect(output.contains("timetables"))
     #expect(output.contains("--timetable"))
+    #expect(output.contains("--direct"))
     #expect(!output.contains("--jr"))
     #expect(output.contains("--version"))
 }
@@ -44,6 +45,15 @@ import Testing
     #expect(output.contains("R9"))
 }
 
+@Test func connectionCommandRequestsDirectConnections() async {
+    let output = await CommandRunner(client: MockIDOSClient(expectedOnlyDirect: true)).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--direct", "--limit", "1"]
+    )
+
+    #expect(output.contains("Spojení Praha → Brno (Vlaky)"))
+    #expect(output.contains("R9"))
+}
+
 @Test func timetablesCommandPrintsCommonAliases() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables"])
 
@@ -62,6 +72,14 @@ import Testing
     #expect(try IDOSTimetable.resolve("MHD Karlovy Vary").slug == "karlovyvary")
     #expect(try IDOSTimetable.resolve("Zlín a Otrokovice").slug == "zlin")
     #expect(try IDOSTimetable.resolve("karlovyvary").slug == "karlovyvary")
+}
+
+@Test func directConnectionRequestUsesIDOSOnlyDirectParameter() {
+    let directRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", onlyDirect: true)
+    let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
+
+    #expect(directRequest.queryItems.contains(URLQueryItem(name: "OnlyDirect", value: "true")))
+    #expect(!normalRequest.queryItems.contains { $0.name == "OnlyDirect" })
 }
 
 @Test func jsonpParserDecodesCallbackPayload() throws {
@@ -127,6 +145,8 @@ import Testing
 }
 
 private struct MockIDOSClient: IDOSClienting {
+    var expectedOnlyDirect = false
+
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
         #expect(timetable.slug == "pid")
 
@@ -147,6 +167,7 @@ private struct MockIDOSClient: IDOSClienting {
 
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection] {
         #expect(request.timetable.slug == "vlaky")
+        #expect(request.onlyDirect == expectedOnlyDirect)
 
         return [
             IDOSConnection(

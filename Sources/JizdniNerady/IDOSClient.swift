@@ -80,19 +80,22 @@ public struct IDOSConnectionRequest: Equatable, Sendable {
     public var to: String
     public var date: String?
     public var time: String?
+    public var onlyDirect: Bool
 
     public init(
         timetable: IDOSTimetable = .defaultTimetable,
         from: String,
         to: String,
         date: String? = nil,
-        time: String? = nil
+        time: String? = nil,
+        onlyDirect: Bool = false
     ) {
         self.timetable = timetable
         self.from = from
         self.to = to
         self.date = date
         self.time = time
+        self.onlyDirect = onlyDirect
     }
 
     var queryItems: [URLQueryItem] {
@@ -101,6 +104,7 @@ public struct IDOSConnectionRequest: Equatable, Sendable {
             URLQueryItem(name: "t", value: to),
             date.map { URLQueryItem(name: "date", value: $0) },
             time.map { URLQueryItem(name: "time", value: $0) },
+            onlyDirect ? URLQueryItem(name: "OnlyDirect", value: "true") : nil,
             URLQueryItem(name: "submit", value: "true"),
         ].compactMap(\.self)
     }

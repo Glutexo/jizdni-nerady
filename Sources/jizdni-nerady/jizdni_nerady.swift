@@ -89,11 +89,11 @@ struct CommandRunner {
         let timetable = try options.timetable()
 
         guard let from = options.value(for: "--from", short: "-f"), !from.isEmpty else {
-            return "Použití: jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]"
+            return "Použití: jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--direct] [--limit počet]"
         }
 
         guard let to = options.value(for: "--to", short: "-t"), !to.isEmpty else {
-            return "Použití: jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]"
+            return "Použití: jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--direct] [--limit počet]"
         }
 
         let request = IDOSConnectionRequest(
@@ -101,7 +101,8 @@ struct CommandRunner {
             from: from,
             to: to,
             date: options.value(for: "--date"),
-            time: options.value(for: "--time")
+            time: options.value(for: "--time"),
+            onlyDirect: options.contains("--direct") || options.contains("--only-direct")
         )
         let limit = options.integerValue(for: "--limit") ?? 5
         let connections = try await client.findConnections(request: request)
@@ -138,12 +139,13 @@ struct CommandRunner {
         """
         Použití:
           jizdni-nerady suggest <text> [--timetable alias] [--limit počet]
-          jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]
+          jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--direct] [--limit počet]
           jizdni-nerady timetables
 
         Volby:
-          -h, --help     Zobrazí nápovědu
-          --version      Zobrazí verzi aplikace
+          -h, --help              Zobrazí nápovědu
+          --version               Zobrazí verzi aplikace
+          --direct, --only-direct Hledá pouze přímá spojení
 
         Výchozí jízdní řád je vlakyautobusymhdvse.
         """
@@ -199,6 +201,10 @@ private struct CommandOptions {
 
     func integerValue(for name: String) -> Int? {
         value(for: name).flatMap(Int.init)
+    }
+
+    func contains(_ name: String) -> Bool {
+        arguments.contains(name)
     }
 
     func timetable() throws -> IDOSTimetable {

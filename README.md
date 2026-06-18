@@ -27,6 +27,12 @@ Volitelně lze omezit počet vypsaných položek:
 swift run jizdni-nerady connections --from Praha --to Brno --limit 3
 ```
 
+Pro vyhledání pouze přímých spojení použijte `--direct`:
+
+```sh
+swift run jizdni-nerady connections --from Praha --to Brno --direct
+```
+
 ### Jízdní řád
 
 Výchozí jízdní řád je `vlakyautobusymhdvse`, tedy vše. Zvolit ho lze parametrem `--timetable`:
@@ -59,7 +65,8 @@ let timetable = try IDOSTimetable.resolve("odis")
 let request = IDOSConnectionRequest(
     timetable: timetable,
     from: "Frýdek,Na Veselé",
-    to: "Ostrava,Hrabůvka,Benzina"
+    to: "Ostrava,Hrabůvka,Benzina",
+    onlyDirect: true
 )
 let connections = try await client.findConnections(request: request)
 ```
