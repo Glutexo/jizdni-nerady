@@ -30,3 +30,4 @@ Pravidla budeme prubezne rozsirovat.
 - Vystup na prikazove radce ma co nejverneji zachovavat vyznamove informace z IDOSu.
 - Pokud HTML vysledek IDOSu obsahuje barvu pro linku nebo jiny prvek, CLI ma pouzit odpovidajici ANSI barvu.
 - Barevne formatovani nesmi nahrazovat textovy obsah; vystup musi zustat srozumitelny i bez barev.
+- Pro symboly ve vystupu preferuj Unicode znaky pred ASCII nahradami, napr. `→` misto `->`.
