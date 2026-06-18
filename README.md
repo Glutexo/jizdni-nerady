@@ -21,6 +21,16 @@ swift run jizdni-nerady connections --from "Frýdek-Místek" --to Ostrava --time
 
 Line names in connection output use the same terminal color as IDOS sends in the HTML result.
 
+### Output Format
+
+All data commands support `--format text`, `--format markdown`, and `--format json`. The default is `text`.
+
+```sh
+swift run jizdni-nerady suggest Praha --format json
+swift run jizdni-nerady connections --from Praha --to Brno --format markdown
+swift run jizdni-nerady timetables --format json
+```
+
 Limit the number of printed results:
 
 ```sh

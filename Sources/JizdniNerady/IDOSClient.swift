@@ -74,7 +74,7 @@ public struct IDOSClient: IDOSClienting {
     }
 }
 
-public struct IDOSConnectionRequest: Equatable, Sendable {
+public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
     public var timetable: IDOSTimetable
     public var from: String
     public var to: String
@@ -110,7 +110,7 @@ public struct IDOSConnectionRequest: Equatable, Sendable {
     }
 }
 
-public struct IDOSTimetable: Equatable, Sendable {
+public struct IDOSTimetable: Codable, Equatable, Sendable {
     public var slug: String
     public var displayName: String
 
@@ -392,7 +392,7 @@ public struct IDOSSuggestion: Codable, Equatable, Sendable {
     }
 }
 
-public struct IDOSConnection: Equatable, Sendable {
+public struct IDOSConnection: Codable, Equatable, Sendable {
     public var id: String
     public var departureTime: String
     public var departureStation: String
@@ -442,7 +442,7 @@ public struct IDOSConnection: Equatable, Sendable {
     }
 }
 
-public struct IDOSConnectionLeg: Equatable, Sendable {
+public struct IDOSConnectionLeg: Codable, Equatable, Sendable {
     public var name: String
     public var color: String?
     public var departureTime: String

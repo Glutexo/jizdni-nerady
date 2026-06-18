@@ -18,6 +18,7 @@ import Testing
     #expect(output.contains("timetables"))
     #expect(output.contains("--timetable"))
     #expect(output.contains("--direct"))
+    #expect(output.contains("--format"))
     #expect(output.contains("Direct connections only"))
     #expect(!output.contains("--jr"))
     #expect(output.contains("--version"))
@@ -37,6 +38,17 @@ import Testing
     #expect(output.contains("station"))
 }
 
+@Test func suggestCommandPrintsJSON() async throws {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["suggest", "Praha", "--timetable", "pid", "--format", "json"]
+    )
+    let json = try jsonDictionary(output)
+
+    #expect((json["query"] as? String) == "Praha")
+    #expect((json["timetable"] as? [String: Any])?["displayName"] as? String == "Prague + PID")
+    #expect((json["suggestions"] as? [[String: Any]])?.first?["text"] as? String == "Praha hl.n.")
+}
+
 @Test func connectionCommandPrintsConnections() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--limit", "1"]
@@ -45,6 +57,16 @@ import Testing
     #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
     #expect(output.contains("12:04 Praha hl.n. → 15:44 Brno hl.n."))
     #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandPrintsMarkdown() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--format", "markdown", "--limit", "1"]
+    )
+
+    #expect(output.contains("## 🧭 Connections"))
+    #expect(output.contains("| Line | From | Departure | To | Arrival |"))
+    #expect(output.contains(#"<span style="color: #008000">R9 (R 981 Vysočina)</span>"#))
 }
 
 @Test func connectionCommandRequestsDirectConnections() async {
@@ -67,6 +89,15 @@ import Testing
     #expect(output.contains("odis"))
     #expect(output.contains("karlovyvary"))
     #expect(output.contains("zlin"))
+}
+
+@Test func timetablesCommandPrintsJSON() async throws {
+    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables", "--format=json"])
+    let json = try jsonDictionary(output)
+    let timetables = json["timetables"] as? [[String: Any]]
+
+    #expect(timetables?.contains { $0["slug"] as? String == "vlakyautobusymhdvse" } == true)
+    #expect(timetables?.contains { $0["displayName"] as? String == "All timetables" } == true)
 }
 
 @Test func timetableResolverAcceptsKnownAliasesAndCustomSlugs() throws {
@@ -195,7 +226,7 @@ private struct MockIDOSClient: IDOSClienting {
                 legs: [
                     IDOSConnectionLeg(
                         name: "R9 (R 981 Vysočina)",
-                        color: nil,
+                        color: "#008000",
                         departureTime: "12:04",
                         fromStation: "Praha hl.n.",
                         arrivalTime: "15:44",
@@ -206,4 +237,9 @@ private struct MockIDOSClient: IDOSClienting {
             )
         ]
     }
+}
+
+private func jsonDictionary(_ output: String) throws -> [String: Any] {
+    let object = try JSONSerialization.jsonObject(with: Data(output.utf8))
+    return try #require(object as? [String: Any])
 }
