@@ -105,6 +105,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
     public var time: String?
     public var isArrival: Bool
     public var onlyDirect: Bool
+    public var via: [String]
     public var maxTransfers: Int?
     public var minimumTransferTime: Int?
 
@@ -116,6 +117,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         time: String? = nil,
         isArrival: Bool = false,
         onlyDirect: Bool = false,
+        via: [String] = [],
         maxTransfers: Int? = nil,
         minimumTransferTime: Int? = nil
     ) {
@@ -126,6 +128,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         self.time = time
         self.isArrival = isArrival
         self.onlyDirect = onlyDirect
+        self.via = via
         self.maxTransfers = maxTransfers
         self.minimumTransferTime = minimumTransferTime
     }
@@ -151,6 +154,11 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
 
         if hasAdvancedOptions {
             items.append(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True"))
+
+            for (index, place) in via.enumerated() {
+                items.append(URLQueryItem(name: "AdvancedForm.Via[\(index)]", value: place))
+            }
+
             items.append(URLQueryItem(
                 name: "AdvancedForm.MaxChange",
                 value: String(maxTransfers ?? Self.defaultMaxTransfers)
@@ -177,7 +185,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
     }
 
     private var hasAdvancedOptions: Bool {
-        maxTransfers != nil || minimumTransferTime != nil
+        !via.isEmpty || maxTransfers != nil || minimumTransferTime != nil
     }
 }
 

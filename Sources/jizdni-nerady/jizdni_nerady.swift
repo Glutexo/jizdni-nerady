@@ -79,11 +79,11 @@ struct CommandRunner {
         let timetable = try options.timetable()
 
         guard let from = options.value(for: "--from", short: "-f"), !from.isEmpty else {
-            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
+            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
         }
 
         guard let to = options.value(for: "--to", short: "-t"), !to.isEmpty else {
-            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
+            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
         }
 
         let request = IDOSConnectionRequest(
@@ -94,6 +94,7 @@ struct CommandRunner {
             time: options.value(for: "--time"),
             isArrival: try options.isArrivalTimeMode(),
             onlyDirect: options.contains("--direct") || options.contains("--only-direct"),
+            via: options.values(for: "--via"),
             maxTransfers: try options.nonNegativeIntegerValue(for: "--max-transfers"),
             minimumTransferTime: try options.nonNegativeIntegerValue(for: "--min-transfer-time")
         )
@@ -114,7 +115,7 @@ struct CommandRunner {
         """
         🚆 Usage:
           jizdni-nerady suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
+          jizdni-nerady connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
           jizdni-nerady timetables [--format text|markdown|json]
 
         ⚙️ Options:
@@ -122,6 +123,7 @@ struct CommandRunner {
           --version               Show the app version
           --arrival               Search by arrival time instead of departure time
           --departure             Search by departure time
+          --via                   Via place, repeat for multiple places
           --direct, --only-direct Direct connections only
           --max-transfers         Maximum transfers permitted, including 0
           --min-transfer-time     Minimum transfer time in minutes, including 0
@@ -236,7 +238,7 @@ private enum OutputFormat: String {
             }
 
             return """
-            🧭 Connections \(output.request.from) → \(output.request.to) (\(output.request.timetable.displayName)):
+            🧭 Connections \(routeDescription(output.request)) (\(output.request.timetable.displayName)):
             \(rows.joined(separator: "\n"))
             """
         case .markdown:
@@ -246,6 +248,7 @@ private enum OutputFormat: String {
 
                 **From:** \(Markdown.escape(output.request.from))
                 **To:** \(Markdown.escape(output.request.to))
+                \(markdownViaLine(output.request))
                 **Timetable:** \(Markdown.escape(output.request.timetable.displayName))
 
                 No connections found.
@@ -273,6 +276,7 @@ private enum OutputFormat: String {
 
             **From:** \(Markdown.escape(output.request.from))
             **To:** \(Markdown.escape(output.request.to))
+            \(markdownViaLine(output.request))
             **Timetable:** \(Markdown.escape(output.request.timetable.displayName))
 
             \(sections)
@@ -322,6 +326,19 @@ private enum OutputFormat: String {
             }
         }
         return details
+    }
+
+    private func routeDescription(_ request: IDOSConnectionRequest) -> String {
+        let via = request.via.isEmpty ? "" : " via \(request.via.joined(separator: ", "))"
+        return "\(request.from) → \(request.to)\(via)"
+    }
+
+    private func markdownViaLine(_ request: IDOSConnectionRequest) -> String {
+        guard !request.via.isEmpty else {
+            return ""
+        }
+
+        return "**Via:** \(Markdown.escape(request.via.joined(separator: ", ")))"
     }
 }
 
@@ -424,6 +441,24 @@ private struct CommandOptions {
         }
 
         return nil
+    }
+
+    func values(for name: String) -> [String] {
+        var values: [String] = []
+
+        for index in arguments.indices {
+            let argument = arguments[index]
+
+            if argument == name, arguments.indices.contains(index + 1) {
+                values.append(arguments[index + 1])
+            }
+
+            if argument.hasPrefix("\(name)=") {
+                values.append(String(argument.dropFirst(name.count + 1)))
+            }
+        }
+
+        return values.filter { !$0.isEmpty }
     }
 
     func integerValue(for name: String) -> Int? {

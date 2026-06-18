@@ -44,6 +44,13 @@ Search direct connections only:
 swift run jizdni-nerady connections --from Praha --to Brno --direct
 ```
 
+Search connections via one or more places:
+
+```sh
+swift run jizdni-nerady connections --from Praha --to Brno --via Pardubice
+swift run jizdni-nerady connections --from Praha --to Brno --via Pardubice --via Olomouc
+```
+
 Search by departure time explicitly, or by arrival time instead:
 
 ```sh
@@ -98,6 +105,7 @@ let request = IDOSConnectionRequest(
     to: "Ostrava,Hrabůvka,Benzina",
     isArrival: true,
     onlyDirect: true,
+    via: ["Místek,Anenská"],
     maxTransfers: 0,
     minimumTransferTime: 10
 )
