@@ -19,6 +19,8 @@ swift run jizdni-nerady connections --from Praha --to Brno --date 18.6.2026 --ti
 swift run jizdni-nerady connections --from "Frýdek-Místek" --to Ostrava --timetable odis
 ```
 
+Názvy linek ve výpisu spojení používají v terminálu stejnou barvu, jakou IDOS posílá v HTML výsledku.
+
 Volitelně lze omezit počet vypsaných položek:
 
 ```sh

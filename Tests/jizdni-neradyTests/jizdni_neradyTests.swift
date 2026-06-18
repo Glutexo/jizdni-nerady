@@ -85,7 +85,7 @@ import Testing
     let html = """
     <div id="connectionBox-396829589" class="box connection" data-share-url="https://idos.cz/detail">
       <p class="reset total">Celkový čas <strong>3 hod 40 min</strong></p>
-      <h3 title="rychlík"><span>R9 (R 981 Vysočina)</span></h3>
+      <h3 title="rychlík" style="color: #FF0000;"><span>R9 (R 981 Vysočina)</span></h3>
       <p class="reset time  " title="">12:04</p><p class="station"><strong class="name ">Praha hl.n.</strong></p>
       <p class="reset time  " title="">15:44</p><p class="station"><strong class="name ">Brno hl.n.</strong></p>
     </div>
@@ -97,6 +97,8 @@ import Testing
     #expect(connections.first?.id == "396829589")
     #expect(connections.first?.duration == "3 hod 40 min")
     #expect(connections.first?.legs.first?.name == "R9 (R 981 Vysočina)")
+    #expect(connections.first?.legs.first?.color == "#FF0000")
+    #expect(connections.first?.summaryLine(number: 1).contains("\u{001B}[38;2;255;0;0mR9") == true)
 }
 
 @Test func connectionParserKeepsHtmlOutsideLineNames() {
@@ -117,6 +119,8 @@ import Testing
     let connection = IDOSConnectionParser.parse(html: html).first
 
     #expect(connection?.legs.map(\.name) == ["Bus 302", "Bus 980"])
+    #expect(connection?.legs.map(\.color) == ["#0000FF", "#0000FF"])
+    #expect(connection?.summaryLine(number: 1).contains("\u{001B}[38;2;0;0;255mBus 302") == true)
     #expect(connection?.summaryLine(number: 1).contains("style=") == false)
     #expect(connection?.summaryLine(number: 1).contains("Transdev") == false)
 }

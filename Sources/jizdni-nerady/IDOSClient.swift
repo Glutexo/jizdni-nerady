@@ -365,7 +365,7 @@ struct IDOSConnection: Equatable {
 
         if !legs.isEmpty {
             let legSummary = legs.map { leg in
-                [leg.name, leg.fromStation, leg.departureTime, "->", leg.arrivalTime, leg.toStation]
+                [leg.coloredName, leg.fromStation, leg.departureTime, "->", leg.arrivalTime, leg.toStation]
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
             }.joined(separator: "; ")
@@ -378,10 +378,15 @@ struct IDOSConnection: Equatable {
 
 struct IDOSConnectionLeg: Equatable {
     var name: String
+    var color: String? = nil
     var departureTime: String
     var fromStation: String
     var arrivalTime: String
     var toStation: String
+
+    var coloredName: String {
+        TerminalColor.color(name, htmlColor: color)
+    }
 }
 
 enum IDOSError: LocalizedError {
@@ -465,9 +470,9 @@ enum IDOSConnectionParser {
             return nil
         }
 
-        let names = lineNames(in: block)
+        let lines = lineDetails(in: block)
 
-        let legs = names.indices.compactMap { index -> IDOSConnectionLeg? in
+        let legs = lines.indices.compactMap { index -> IDOSConnectionLeg? in
             let departureIndex = index * 2
             let arrivalIndex = departureIndex + 1
 
@@ -480,7 +485,8 @@ enum IDOSConnectionParser {
             let departure = stationRows[departureIndex]
             let arrival = stationRows[arrivalIndex]
             return IDOSConnectionLeg(
-                name: names[index],
+                name: lines[index].name,
+                color: lines[index].color,
                 departureTime: departure.time,
                 fromStation: departure.station,
                 arrivalTime: arrival.time,
@@ -507,7 +513,7 @@ enum IDOSConnectionParser {
         )
     }
 
-    private static func lineNames(in block: String) -> [String] {
+    private static func lineDetails(in block: String) -> [(name: String, color: String?)] {
         RegexSupport.matches(
             pattern: #"<h3\b.*?</h3>"#,
             in: block,
@@ -518,14 +524,104 @@ enum IDOSConnectionParser {
             }
 
             let heading = String(block[range])
-            return RegexSupport.captures(
+            let name = RegexSupport.captures(
                 pattern: #"<span>(.*?)</span>"#,
                 in: heading,
                 options: [.dotMatchesLineSeparators]
             )
             .last
             .map { HTMLText.clean($0[0]) }
+
+            guard let name else {
+                return nil
+            }
+
+            return (
+                name: name,
+                color: HTMLStyle.color(from: heading)
+            )
         }
+    }
+}
+
+private enum HTMLStyle {
+    static func color(from html: String) -> String? {
+        RegexSupport.capture(
+            pattern: #"(?i)\bcolor\s*:\s*([^;"']+)"#,
+            in: html
+        )?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private enum TerminalColor {
+    private static let reset = "\u{001B}[0m"
+
+    static func color(_ text: String, htmlColor: String?) -> String {
+        guard !text.isEmpty,
+              let htmlColor,
+              let rgb = rgb(from: htmlColor)
+        else {
+            return text
+        }
+
+        return "\u{001B}[38;2;\(rgb.red);\(rgb.green);\(rgb.blue)m\(text)\(reset)"
+    }
+
+    private static func rgb(from htmlColor: String) -> (red: Int, green: Int, blue: Int)? {
+        let color = htmlColor
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        if color.hasPrefix("#") {
+            return rgbFromHex(String(color.dropFirst()))
+        }
+
+        if color.hasPrefix("rgb") {
+            let components = RegexSupport.captures(
+                pattern: #"rgba?\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})"#,
+                in: color
+            ).first
+
+            guard let components,
+                  components.count == 3,
+                  let red = clampedColorComponent(components[0]),
+                  let green = clampedColorComponent(components[1]),
+                  let blue = clampedColorComponent(components[2])
+            else {
+                return nil
+            }
+
+            return (red, green, blue)
+        }
+
+        return nil
+    }
+
+    private static func rgbFromHex(_ hex: String) -> (red: Int, green: Int, blue: Int)? {
+        switch hex.count {
+        case 3:
+            let expanded = hex.map { String(repeating: String($0), count: 2) }.joined()
+            return rgbFromHex(expanded)
+        case 6:
+            guard let value = Int(hex, radix: 16) else {
+                return nil
+            }
+            return (
+                red: (value >> 16) & 0xFF,
+                green: (value >> 8) & 0xFF,
+                blue: value & 0xFF
+            )
+        default:
+            return nil
+        }
+    }
+
+    private static func clampedColorComponent(_ value: String) -> Int? {
+        guard let component = Int(value), (0...255).contains(component) else {
+            return nil
+        }
+        return component
     }
 }
 
