@@ -225,6 +225,9 @@ import Testing
 
     #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True")))
     #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxChange", value: "0")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MinTime", value: "-1")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxTime", value: "240")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "trTypeId[154]", value: "154")))
     #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.AdvancedFormIsOpen" })
     #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.MaxChange" })
 }
@@ -234,7 +237,12 @@ import Testing
     let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
 
     #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxChange", value: "4")))
     #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MinTime", value: "10")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxTime", value: "240")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxArcLength", value: "60")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxArcLengthCity", value: "10")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "trTypeId[301]", value: "301")))
     #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.AdvancedFormIsOpen" })
     #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.MinTime" })
 }

@@ -87,6 +87,17 @@ public struct IDOSClient: IDOSClienting {
 }
 
 public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
+    private static let defaultMaxTransfers = 4
+    private static let defaultMinimumTransferTime = -1
+    private static let defaultMaximumTransferTime = 240
+    private static let defaultMaximumWalkingTime = 60
+    private static let defaultMaximumCityWalkingTime = 10
+    private static let defaultTransportTypeIDs = [
+        150, 151, 152, 153, 154, 155, 156,
+        200, 201, 202,
+        300, 301, 303, 306,
+    ]
+
     public var timetable: IDOSTimetable
     public var from: String
     public var to: String
@@ -138,20 +149,35 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
             items.append(URLQueryItem(name: "OnlyDirect", value: "true"))
         }
 
-        if maxTransfers != nil || minimumTransferTime != nil {
+        if hasAdvancedOptions {
             items.append(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True"))
-        }
+            items.append(URLQueryItem(
+                name: "AdvancedForm.MaxChange",
+                value: String(maxTransfers ?? Self.defaultMaxTransfers)
+            ))
+            items.append(URLQueryItem(
+                name: "AdvancedForm.MinTime",
+                value: String(minimumTransferTime ?? Self.defaultMinimumTransferTime)
+            ))
+            items.append(URLQueryItem(name: "AdvancedForm.MaxTime", value: String(Self.defaultMaximumTransferTime)))
+            items.append(URLQueryItem(name: "AdvancedForm.MaxArcLength", value: String(Self.defaultMaximumWalkingTime)))
+            items.append(URLQueryItem(
+                name: "AdvancedForm.MaxArcLengthCity",
+                value: String(Self.defaultMaximumCityWalkingTime)
+            ))
 
-        if let maxTransfers {
-            items.append(URLQueryItem(name: "AdvancedForm.MaxChange", value: String(maxTransfers)))
-        }
-
-        if let minimumTransferTime {
-            items.append(URLQueryItem(name: "AdvancedForm.MinTime", value: String(minimumTransferTime)))
+            for transportTypeID in Self.defaultTransportTypeIDs {
+                let value = String(transportTypeID)
+                items.append(URLQueryItem(name: "trTypeId[\(value)]", value: value))
+            }
         }
 
         items.append(URLQueryItem(name: "submit", value: "true"))
         return items
+    }
+
+    private var hasAdvancedOptions: Bool {
+        maxTransfers != nil || minimumTransferTime != nil
     }
 }
 
