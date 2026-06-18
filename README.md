@@ -19,6 +19,13 @@ swift run jizdni-nerady connections --from Praha --to Brno --date 18.6.2026 --ti
 swift run jizdni-nerady connections --from "Frýdek-Místek" --to Ostrava --timetable odis
 ```
 
+Search station departures:
+
+```sh
+swift run jizdni-nerady departures --station "Ostrava,Hrabůvka,Benzina" --timetable odis --time 16:00
+swift run jizdni-nerady departures --station "Ostrava,Hrabůvka,Benzina" --timetable odis --arrival
+```
+
 Line names in connection output use the same terminal color as IDOS sends in the HTML result.
 Connection legs also include transport emoji such as 🚆 for trains and 🚌 for buses when IDOS exposes the transport type.
 
@@ -30,6 +37,7 @@ Unknown command-line options are rejected.
 ```sh
 swift run jizdni-nerady suggest Praha --format json
 swift run jizdni-nerady connections --from Praha --to Brno --format markdown
+swift run jizdni-nerady departures --station "Ostrava,Hrabůvka,Benzina" --format json
 swift run jizdni-nerady timetables --format json
 ```
 
@@ -111,9 +119,16 @@ let request = IDOSConnectionRequest(
     minimumTransferTime: 10
 )
 let connections = try await client.findConnections(request: request)
+
+let departuresRequest = IDOSDeparturesRequest(
+    timetable: timetable,
+    station: "Ostrava,Hrabůvka,Benzina",
+    time: "16:00"
+)
+let departures = try await client.findDepartures(request: departuresRequest)
 ```
 
-The public API includes `IDOSClient`, `IDOSConnectionRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg`, `IDOSTransportMode`, and `IDOSError`.
+The public API includes `IDOSClient`, `IDOSConnectionRequest`, `IDOSDeparturesRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg`, `IDOSDeparture`, `IDOSTransportMode`, and `IDOSError`.
 
 ## Development
 

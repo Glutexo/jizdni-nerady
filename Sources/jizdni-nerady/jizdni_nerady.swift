@@ -46,6 +46,8 @@ struct CommandRunner {
                 return try await suggestOutput(for: Array(arguments.dropFirst()))
             case "connections":
                 return try await connectionsOutput(for: Array(arguments.dropFirst()))
+            case "departures":
+                return try await departuresOutput(for: Array(arguments.dropFirst()))
             case "timetables":
                 return try timetablesOutput(for: Array(arguments.dropFirst()))
             default:
@@ -113,6 +115,33 @@ struct CommandRunner {
         )
     }
 
+    private func departuresOutput(for arguments: [String]) async throws -> String {
+        let options = CommandOptions(arguments)
+        try options.rejectUnknownOptions(
+            allowedFlags: ["--arrival", "--departure"],
+            allowedValueOptions: ["--station", "-s", "--timetable", "--date", "--time", "--format", "--limit"]
+        )
+        let format = try options.outputFormat()
+        let timetable = try options.timetable()
+
+        guard let station = options.value(for: "--station", short: "-s"), !station.isEmpty else {
+            throw CommandError.usage("Usage: jizdni-nerady departures --station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]")
+        }
+
+        let request = IDOSDeparturesRequest(
+            timetable: timetable,
+            station: station,
+            date: options.value(for: "--date"),
+            time: options.value(for: "--time"),
+            isArrival: try options.isArrivalTimeMode()
+        )
+        let limit = options.integerValue(for: "--limit") ?? 10
+        let departures = try await client.findDepartures(request: request)
+        return try format.renderDepartures(
+            DeparturesOutput(request: request, departures: Array(departures.prefix(max(1, limit))))
+        )
+    }
+
     private func timetablesOutput(for arguments: [String]) throws -> String {
         let options = CommandOptions(arguments)
         try options.rejectUnknownOptions(allowedValueOptions: ["--format"])
@@ -125,6 +154,7 @@ struct CommandRunner {
         🚆 Usage:
           jizdni-nerady suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
           jizdni-nerady connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
+          jizdni-nerady departures --station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
           jizdni-nerady timetables [--format text|markdown|json]
 
         ⚙️ Options:
@@ -132,6 +162,7 @@ struct CommandRunner {
           --version               Show the app version
           --arrival               Search by arrival time instead of departure time
           --departure             Search by departure time
+          --station               Station for departures or arrivals
           --via                   Via place, repeat for multiple places
           --direct, --only-direct Direct connections only
           --max-transfers         Maximum transfers permitted, including 0
@@ -298,6 +329,54 @@ private enum OutputFormat: String {
         }
     }
 
+    func renderDepartures(_ output: DeparturesOutput) throws -> String {
+        let title = output.request.isArrival ? "Arrivals" : "Departures"
+
+        switch self {
+        case .text:
+            guard !output.departures.isEmpty else {
+                return "🔎 IDOS returned no \(title.lowercased())."
+            }
+
+            let rows = output.departures.enumerated().map { index, departure in
+                departure.summaryLine(number: index + 1)
+            }
+
+            return """
+            🚏 \(title) \(output.request.station) (\(output.request.timetable.displayName)):
+            \(rows.joined(separator: "\n"))
+            """
+        case .markdown:
+            guard !output.departures.isEmpty else {
+                return """
+                ## 🚏 \(title)
+
+                **Station:** \(Markdown.escape(output.request.station))
+                **Timetable:** \(Markdown.escape(output.request.timetable.displayName))
+
+                No \(title.lowercased()) found.
+                """
+            }
+
+            let rows = output.departures.enumerated().map { index, departure in
+                "| \(index + 1) | \(Markdown.escape(departure.time)) | \(Markdown.departureLineName(departure)) | \(Markdown.escape(departure.destination)) | \(Markdown.escape(departure.platform ?? "")) | \(Markdown.escape(departure.via ?? "")) | \(Markdown.escape(departure.delay ?? "")) |"
+            }.joined(separator: "\n")
+
+            return """
+            ## 🚏 \(title)
+
+            **Station:** \(Markdown.escape(output.request.station))
+            **Timetable:** \(Markdown.escape(output.request.timetable.displayName))
+
+            | # | Time | Line | Destination | Platform | Via | Delay |
+            | ---: | --- | --- | --- | --- | --- | --- |
+            \(rows)
+            """
+        case .json:
+            return try JSON.write(output)
+        }
+    }
+
     func renderTimetables(_ output: TimetablesOutput) throws -> String {
         switch self {
         case .text:
@@ -365,6 +444,11 @@ private struct ConnectionsOutput: Codable {
     var connections: [IDOSConnection]
 }
 
+private struct DeparturesOutput: Codable {
+    var request: IDOSDeparturesRequest
+    var departures: [IDOSDeparture]
+}
+
 private struct TimetablesOutput: Codable {
     var timetables: [IDOSTimetable]
 }
@@ -395,6 +479,15 @@ private enum Markdown {
         let prefix = leg.transportMode.map { "\($0.emoji) " } ?? ""
         guard let color = leg.color, !color.isEmpty else {
             return "\(prefix)\(escape(leg.name))"
+        }
+        return "\(prefix)<span style=\"color: \(htmlEscape(color))\">\(name)</span>"
+    }
+
+    static func departureLineName(_ departure: IDOSDeparture) -> String {
+        let prefix = departure.transportMode.map { "\($0.emoji) " } ?? ""
+        let name = htmlEscape(departure.lineName)
+        guard let color = departure.lineColor, !color.isEmpty else {
+            return "\(prefix)\(escape(departure.lineName))"
         }
         return "\(prefix)<span style=\"color: \(htmlEscape(color))\">\(name)</span>"
     }

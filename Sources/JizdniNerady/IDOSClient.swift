@@ -6,6 +6,7 @@ import FoundationNetworking
 public protocol IDOSClienting: Sendable {
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion]
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection]
+    func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture]
 }
 
 public struct IDOSClient: IDOSClienting {
@@ -54,6 +55,26 @@ public struct IDOSClient: IDOSClienting {
         return IDOSConnectionParser.parse(html: html)
     }
 
+    public func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture] {
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/en/\(request.timetable.slug)/odjezdy/"
+
+        var urlRequest = URLRequest(url: try components.requiredURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var body = URLComponents()
+        body.queryItems = request.formItems
+        urlRequest.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+
+        let data = try await data(for: urlRequest)
+        guard let html = String(data: data, encoding: .utf8) else {
+            throw IDOSError.invalidResponse
+        }
+
+        return IDOSDepartureParser.parse(html: html)
+    }
+
     private func data(from url: URL) async throws -> Data {
         let request = URLRequest(url: url)
         return try await data(for: request)
@@ -83,6 +104,46 @@ public struct IDOSClient: IDOSClienting {
 
             task.resume()
         }
+    }
+}
+
+public struct IDOSDeparturesRequest: Codable, Equatable, Sendable {
+    public var timetable: IDOSTimetable
+    public var station: String
+    public var date: String?
+    public var time: String?
+    public var isArrival: Bool
+
+    public init(
+        timetable: IDOSTimetable = .defaultTimetable,
+        station: String,
+        date: String? = nil,
+        time: String? = nil,
+        isArrival: Bool = false
+    ) {
+        self.timetable = timetable
+        self.station = station
+        self.date = date
+        self.time = time
+        self.isArrival = isArrival
+    }
+
+    var formItems: [URLQueryItem] {
+        var items = [
+            URLQueryItem(name: "From", value: station),
+            URLQueryItem(name: "IsArr", value: isArrival ? "True" : "False"),
+        ]
+
+        if let date {
+            items.append(URLQueryItem(name: "Date", value: date))
+        }
+
+        if let time {
+            items.append(URLQueryItem(name: "Time", value: time))
+        }
+
+        items.append(URLQueryItem(name: "submit", value: "true"))
+        return items
     }
 }
 
@@ -561,6 +622,79 @@ public struct IDOSConnectionLeg: Codable, Equatable, Sendable {
     }
 }
 
+public struct IDOSDeparture: Codable, Equatable, Sendable {
+    public var id: String
+    public var time: String
+    public var lineName: String
+    public var lineColor: String?
+    public var transportMode: IDOSTransportMode?
+    public var destination: String
+    public var platform: String?
+    public var via: String?
+    public var carrier: String?
+    public var delay: String?
+
+    public init(
+        id: String,
+        time: String,
+        lineName: String,
+        lineColor: String? = nil,
+        transportMode: IDOSTransportMode? = nil,
+        destination: String,
+        platform: String? = nil,
+        via: String? = nil,
+        carrier: String? = nil,
+        delay: String? = nil
+    ) {
+        self.id = id
+        self.time = time
+        self.lineName = lineName
+        self.lineColor = lineColor
+        self.transportMode = transportMode
+        self.destination = destination
+        self.platform = platform
+        self.via = via
+        self.carrier = carrier
+        self.delay = delay
+    }
+
+    public var displayLineName: String {
+        [transportMode?.emoji, coloredLineName]
+            .compactMap(\.self)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    public func summaryLine(number: Int) -> String {
+        var result = "\(number). \(time) \(displayLineName) → \(destination)"
+
+        if let platform, !platform.isEmpty {
+            result += " · platform \(platform)"
+        }
+
+        var details: [String] = []
+        if let via, !via.isEmpty {
+            details.append("via \(via)")
+        }
+        if let carrier, !carrier.isEmpty {
+            details.append(carrier)
+        }
+        if let delay, !delay.isEmpty {
+            details.append(delay)
+        }
+
+        if !details.isEmpty {
+            result += "\n   \(details.joined(separator: "\n   "))"
+        }
+
+        return result
+    }
+
+    var coloredLineName: String {
+        TerminalColor.color(lineName, htmlColor: lineColor)
+    }
+}
+
 public enum IDOSTransportMode: String, Codable, Equatable, Sendable {
     case train
     case bus
@@ -802,6 +936,99 @@ enum IDOSConnectionParser {
                 transportMode: IDOSTransportMode.infer(from: "\(title) \(name)")
             )
         }
+    }
+}
+
+enum IDOSDepartureParser {
+    static func parse(html: String) -> [IDOSDeparture] {
+        RegexSupport.captures(
+            pattern: #"<tr class="dep-row dep-row-first"([^>]*)>(.*?)</tr>\s*<tr class="dep-row dep-row-second"[^>]*>(.*?)</tr>"#,
+            in: html,
+            options: [.dotMatchesLineSeparators]
+        ).compactMap { row in
+            parseDeparture(attributes: row[0], firstRow: row[1], secondRow: row[2])
+        }
+    }
+
+    private static func parseDeparture(attributes: String, firstRow: String, secondRow: String) -> IDOSDeparture? {
+        let headings = RegexSupport.captures(
+            pattern: #"<h3\b[^>]*>(.*?)</h3>"#,
+            in: firstRow,
+            options: [.dotMatchesLineSeparators]
+        ).map { HTMLText.clean($0[0]) }
+
+        let destination = attribute("data-stationname", in: attributes) ?? headings.first ?? ""
+        let lineHTML = RegexSupport.matches(
+            pattern: #"<h3\b[^>]*>.*?</h3>"#,
+            in: firstRow,
+            options: [.dotMatchesLineSeparators]
+        ).compactMap { match -> String? in
+            guard let range = Range(match.range, in: firstRow) else {
+                return nil
+            }
+
+            let heading = String(firstRow[range])
+            return HTMLStyle.color(from: heading) == nil ? nil : heading
+        }.last ?? ""
+        let lineName = lineHTML.isEmpty ? (headings.count > 1 ? headings[1] : "") : HTMLText.clean(lineHTML)
+        let time = attribute("data-datetime", in: attributes)
+            .flatMap(timeFromDateTime)
+            ?? (headings.count > 2 ? headings[2] : "")
+
+        guard !time.isEmpty, !lineName.isEmpty, !destination.isEmpty else {
+            return nil
+        }
+
+        let platform = RegexSupport.capture(
+            pattern: #"<span title="(?:platform|nástupiště)"[^>]*>(.*?)</span>"#,
+            in: firstRow,
+            options: [.dotMatchesLineSeparators]
+        ).map(HTMLText.clean)
+        let via = detail(title: "pass via", in: secondRow).map { value in
+            value.hasPrefix("via ") ? String(value.dropFirst(4)) : value
+        }
+        let carrier = detail(title: "dopravce", in: secondRow) ?? detail(title: "carrier", in: secondRow)
+        let delay = RegexSupport.capture(
+            pattern: #"<a\b[^>]*class="delay-bubble"[^>]*>(.*?)</a>"#,
+            in: secondRow,
+            options: [.dotMatchesLineSeparators]
+        ).map(HTMLText.clean)
+
+        return IDOSDeparture(
+            id: [
+                attribute("data-ttindex", in: attributes),
+                attribute("data-train", in: attributes),
+                attribute("data-datetime", in: attributes),
+            ].compactMap(\.self).joined(separator: "-"),
+            time: time,
+            lineName: lineName,
+            lineColor: HTMLStyle.color(from: lineHTML),
+            transportMode: IDOSTransportMode.infer(from: lineName),
+            destination: destination,
+            platform: platform,
+            via: via,
+            carrier: carrier,
+            delay: delay
+        )
+    }
+
+    private static func attribute(_ name: String, in html: String) -> String? {
+        RegexSupport.capture(
+            pattern: #"\#(name)="([^"]*)""#,
+            in: html
+        ).map { HTMLText.clean($0) }
+    }
+
+    private static func detail(title: String, in html: String) -> String? {
+        RegexSupport.capture(
+            pattern: #"<span title="\#(title)"[^>]*>(.*?)</span>"#,
+            in: html,
+            options: [.dotMatchesLineSeparators]
+        ).map(HTMLText.clean)
+    }
+
+    private static func timeFromDateTime(_ value: String) -> String? {
+        RegexSupport.capture(pattern: #"([0-9]{1,2}:[0-9]{2})(?::[0-9]{2})?$"#, in: value)
     }
 }
 

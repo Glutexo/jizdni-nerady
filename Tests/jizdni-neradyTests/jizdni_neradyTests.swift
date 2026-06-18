@@ -15,8 +15,10 @@ import Testing
 
     #expect(output.contains("🚆 Usage:"))
     #expect(output.contains("connections"))
+    #expect(output.contains("departures"))
     #expect(output.contains("timetables"))
     #expect(output.contains("--timetable"))
+    #expect(output.contains("--station"))
     #expect(output.contains("--arrival"))
     #expect(output.contains("--departure"))
     #expect(output.contains("--via"))
@@ -221,6 +223,54 @@ import Testing
     #expect(output.contains("❌ Error: Invalid --min-transfer-time: -1. Use a non-negative integer."))
 }
 
+@Test func departuresCommandPrintsDepartures() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["departures", "--station", "Ostrava,Hrabůvka,Benzina", "--timetable", "odis", "--time", "16:00", "--limit", "1"]
+    )
+
+    #expect(output.contains("🚏 Departures Ostrava,Hrabůvka,Benzina (ODIS)"))
+    #expect(output.contains("16:03"))
+    #expect(output.contains("🚌"))
+    #expect(output.contains("Bus 980"))
+    #expect(output.contains("Rožnov p.Radh.,,aut.st."))
+}
+
+@Test func departuresCommandPrintsJSON() async throws {
+    let output = await CommandRunner(client: MockIDOSClient(expectedDepartureIsArrival: true)).output(
+        for: [
+            "departures", "--station", "Ostrava,Hrabůvka,Benzina", "--timetable", "odis",
+            "--time", "16:00", "--arrival", "--format", "json", "--limit", "1",
+        ]
+    )
+    let json = try jsonDictionary(output)
+    let request = json["request"] as? [String: Any]
+
+    #expect(request?["station"] as? String == "Ostrava,Hrabůvka,Benzina")
+    #expect(request?["isArrival"] as? Bool == true)
+    #expect((json["departures"] as? [[String: Any]])?.first?["lineName"] as? String == "Bus 980")
+}
+
+@Test func departuresCommandPrintsMarkdown() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: [
+            "departures", "--station", "Ostrava,Hrabůvka,Benzina", "--timetable", "odis",
+            "--format", "markdown", "--limit", "1",
+        ]
+    )
+
+    #expect(output.contains("## 🚏 Departures"))
+    #expect(output.contains("| # | Time | Line | Destination | Platform | Via | Delay |"))
+    #expect(output.contains(#"🚌 <span style="color: #0000FF">Bus 980</span>"#))
+}
+
+@Test func departuresCommandRejectsUnknownOptions() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["departures", "--station", "Ostrava,Hrabůvka,Benzina", "--unknown"]
+    )
+
+    #expect(output.contains("❌ Error: Unknown option: --unknown."))
+}
+
 @Test func timetablesCommandPrintsCommonAliases() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables"])
 
@@ -325,6 +375,16 @@ import Testing
     #expect(!normalRequest.formItems.contains { $0.name.hasPrefix("AdvancedForm.Via[") })
 }
 
+@Test func departuresRequestUsesIDOSParameters() {
+    let request = IDOSDeparturesRequest(station: "Ostrava,Hrabůvka,Benzina", date: "18.6.2026", time: "16:00", isArrival: true)
+
+    #expect(request.formItems.contains(URLQueryItem(name: "From", value: "Ostrava,Hrabůvka,Benzina")))
+    #expect(request.formItems.contains(URLQueryItem(name: "Date", value: "18.6.2026")))
+    #expect(request.formItems.contains(URLQueryItem(name: "Time", value: "16:00")))
+    #expect(request.formItems.contains(URLQueryItem(name: "IsArr", value: "True")))
+    #expect(request.formItems.contains(URLQueryItem(name: "submit", value: "true")))
+}
+
 @Test func jsonpParserDecodesCallbackPayload() throws {
     let data = Data(#"cb([{"text":"Praha"}]);"#.utf8)
     let payload = try IDOSJSONP.decodePayload(from: data)
@@ -410,12 +470,46 @@ import Testing
     #expect(connection?.summaryLine(number: 1).contains("🚆") == true)
 }
 
+@Test func departureParserReadsDeparturesTableRows() {
+    let html = """
+    <tr class="dep-row dep-row-first" data-ttindex="1" data-train="4286" data-datetime="18.06.2026 16:03:00" data-stationname="Rožnov p.Radh.,,aut.st.">
+      <td class="departures-table__cell departures-table__cell--height-collapse" title="Arrival station"><h3>Rožnov p.Radh.,,aut.st.</h3></td>
+      <td class="departures-table__cell departures-table__cell--height-collapse">
+        <span class="wwwtt tt-icon-dep" style="color:#0000FF">&#247;</span>
+        <span class="desc"><span class="code"><h3 style="color:#0000FF; display:inline">Bus 980</h3></span></span>
+      </td>
+      <td class="departures-table__cell"><h3>16:03</h3></td>
+      <td class="departures-table__cell"><span title="platform" class="color-lightgrey">1</span></td>
+    </tr>
+    <tr class="dep-row dep-row-second" data-ttindex="1" data-train="4286" data-datetime="18.06.2026 16:03:00">
+      <td class="departures-table__cell small"><span title="pass via" class="color-lightgrey">via Frýdek-Místek,Místek,Anenská</span></td>
+      <td class="departures-table__cell small"><span title="dopravce" class="color-lightgrey">Transdev Slezsko a.s.</span></td>
+      <td class="departures-table__cell cell-delay" colspan="2"><a href="javascript:;" class="delay-bubble">Currently no delay</a></td>
+    </tr>
+    """
+
+    let departure = IDOSDepartureParser.parse(html: html).first
+
+    #expect(departure?.id == "1-4286-18.06.2026 16:03:00")
+    #expect(departure?.time == "16:03")
+    #expect(departure?.lineName == "Bus 980")
+    #expect(departure?.lineColor == "#0000FF")
+    #expect(departure?.transportMode == .bus)
+    #expect(departure?.destination == "Rožnov p.Radh.,,aut.st.")
+    #expect(departure?.platform == "1")
+    #expect(departure?.via == "Frýdek-Místek,Místek,Anenská")
+    #expect(departure?.carrier == "Transdev Slezsko a.s.")
+    #expect(departure?.delay == "Currently no delay")
+    #expect(departure?.summaryLine(number: 1).contains("🚌") == true)
+}
+
 private struct MockIDOSClient: IDOSClienting {
     var expectedIsArrival = false
     var expectedOnlyDirect = false
     var expectedVia: [String] = []
     var expectedMaxTransfers: Int? = nil
     var expectedMinimumTransferTime: Int? = nil
+    var expectedDepartureIsArrival = false
 
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
         #expect(timetable.slug == "pid")
@@ -463,6 +557,27 @@ private struct MockIDOSClient: IDOSClienting {
                     )
                 ],
                 shareURL: "https://idos.cz/detail"
+            )
+        ]
+    }
+
+    func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture] {
+        #expect(request.timetable.slug == "odis")
+        #expect(request.station == "Ostrava,Hrabůvka,Benzina")
+        #expect(request.isArrival == expectedDepartureIsArrival)
+
+        return [
+            IDOSDeparture(
+                id: "1-4286-18.06.2026 16:03:00",
+                time: "16:03",
+                lineName: "Bus 980",
+                lineColor: "#0000FF",
+                transportMode: .bus,
+                destination: "Rožnov p.Radh.,,aut.st.",
+                platform: "1",
+                via: "Frýdek-Místek,Místek,Anenská",
+                carrier: "Transdev Slezsko a.s.",
+                delay: "Currently no delay"
             )
         ]
     }
