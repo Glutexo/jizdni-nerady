@@ -37,9 +37,16 @@ public struct IDOSClient: IDOSClienting {
     public func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/en/\(request.timetable.slug)/spojeni/"
-        components.queryItems = request.queryItems
 
-        let data = try await data(from: components.requiredURL)
+        var urlRequest = URLRequest(url: try components.requiredURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        var body = URLComponents()
+        body.queryItems = request.formItems
+        urlRequest.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+
+        let data = try await data(for: urlRequest)
         guard let html = String(data: data, encoding: .utf8) else {
             throw IDOSError.invalidResponse
         }
@@ -48,7 +55,12 @@ public struct IDOSClient: IDOSClienting {
     }
 
     private func data(from url: URL) async throws -> Data {
-        var request = URLRequest(url: url)
+        let request = URLRequest(url: url)
+        return try await data(for: request)
+    }
+
+    private func data(for request: URLRequest) async throws -> Data {
+        var request = request
         request.setValue("jizdni-nerady/0.1 (+local personal use)", forHTTPHeaderField: "User-Agent")
 
         return try await withCheckedThrowingContinuation { continuation in
@@ -80,6 +92,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
     public var to: String
     public var date: String?
     public var time: String?
+    public var isArrival: Bool
     public var onlyDirect: Bool
     public var maxTransfers: Int?
 
@@ -89,6 +102,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         to: String,
         date: String? = nil,
         time: String? = nil,
+        isArrival: Bool = false,
         onlyDirect: Bool = false,
         maxTransfers: Int? = nil
     ) {
@@ -97,16 +111,18 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         self.to = to
         self.date = date
         self.time = time
+        self.isArrival = isArrival
         self.onlyDirect = onlyDirect
         self.maxTransfers = maxTransfers
     }
 
-    var queryItems: [URLQueryItem] {
+    var formItems: [URLQueryItem] {
         [
-            URLQueryItem(name: "f", value: from),
-            URLQueryItem(name: "t", value: to),
-            date.map { URLQueryItem(name: "date", value: $0) },
-            time.map { URLQueryItem(name: "time", value: $0) },
+            URLQueryItem(name: "From", value: from),
+            URLQueryItem(name: "To", value: to),
+            date.map { URLQueryItem(name: "Date", value: $0) },
+            time.map { URLQueryItem(name: "Time", value: $0) },
+            URLQueryItem(name: "IsArr", value: isArrival ? "True" : "False"),
             onlyDirect ? URLQueryItem(name: "OnlyDirect", value: "true") : nil,
             maxTransfers.map { URLQueryItem(name: "AdvancedForm.MaxChange", value: String($0)) },
             URLQueryItem(name: "submit", value: "true"),

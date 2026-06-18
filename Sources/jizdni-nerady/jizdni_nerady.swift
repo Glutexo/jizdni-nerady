@@ -79,11 +79,11 @@ struct CommandRunner {
         let timetable = try options.timetable()
 
         guard let from = options.value(for: "--from", short: "-f"), !from.isEmpty else {
-            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]")
+            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]")
         }
 
         guard let to = options.value(for: "--to", short: "-t"), !to.isEmpty else {
-            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]")
+            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]")
         }
 
         let request = IDOSConnectionRequest(
@@ -92,6 +92,7 @@ struct CommandRunner {
             to: to,
             date: options.value(for: "--date"),
             time: options.value(for: "--time"),
+            isArrival: options.contains("--arrival"),
             onlyDirect: options.contains("--direct") || options.contains("--only-direct"),
             maxTransfers: try options.nonNegativeIntegerValue(for: "--max-transfers")
         )
@@ -112,12 +113,13 @@ struct CommandRunner {
         """
         🚆 Usage:
           jizdni-nerady suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]
+          jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]
           jizdni-nerady timetables [--format text|markdown|json]
 
         ⚙️ Options:
           -h, --help              Show help
           --version               Show the app version
+          --arrival               Search by arrival time instead of departure time
           --direct, --only-direct Direct connections only
           --max-transfers         Maximum transfers permitted, including 0
           --format                Output format: text, markdown, or json

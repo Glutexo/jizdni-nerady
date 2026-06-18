@@ -17,6 +17,7 @@ import Testing
     #expect(output.contains("connections"))
     #expect(output.contains("timetables"))
     #expect(output.contains("--timetable"))
+    #expect(output.contains("--arrival"))
     #expect(output.contains("--direct"))
     #expect(output.contains("--max-transfers"))
     #expect(output.contains("--format"))
@@ -71,15 +72,16 @@ import Testing
 }
 
 @Test func connectionCommandPrintsJSONWithMaximumTransfers() async throws {
-    let output = await CommandRunner(client: MockIDOSClient(expectedMaxTransfers: 0)).output(
+    let output = await CommandRunner(client: MockIDOSClient(expectedIsArrival: true, expectedMaxTransfers: 0)).output(
         for: [
             "connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky",
-            "--max-transfers", "0", "--format", "json", "--limit", "1",
+            "--arrival", "--max-transfers", "0", "--format", "json", "--limit", "1",
         ]
     )
     let json = try jsonDictionary(output)
     let request = json["request"] as? [String: Any]
 
+    #expect(request?["isArrival"] as? Bool == true)
     #expect(request?["maxTransfers"] as? Int == 0)
     #expect((json["connections"] as? [[String: Any]])?.first?["id"] as? String == "396829589")
 }
@@ -87,6 +89,15 @@ import Testing
 @Test func connectionCommandRequestsDirectConnections() async {
     let output = await CommandRunner(client: MockIDOSClient(expectedOnlyDirect: true)).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--direct", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandRequestsArrivalTime() async {
+    let output = await CommandRunner(client: MockIDOSClient(expectedIsArrival: true)).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--time", "15:00", "--arrival", "--limit", "1"]
     )
 
     #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
@@ -156,16 +167,24 @@ import Testing
     let directRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", onlyDirect: true)
     let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
 
-    #expect(directRequest.queryItems.contains(URLQueryItem(name: "OnlyDirect", value: "true")))
-    #expect(!normalRequest.queryItems.contains { $0.name == "OnlyDirect" })
+    #expect(directRequest.formItems.contains(URLQueryItem(name: "OnlyDirect", value: "true")))
+    #expect(!normalRequest.formItems.contains { $0.name == "OnlyDirect" })
+}
+
+@Test func connectionRequestUsesIDOSArrivalTimeParameter() {
+    let arrivalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", isArrival: true)
+    let departureRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
+
+    #expect(arrivalRequest.formItems.contains(URLQueryItem(name: "IsArr", value: "True")))
+    #expect(departureRequest.formItems.contains(URLQueryItem(name: "IsArr", value: "False")))
 }
 
 @Test func connectionRequestUsesIDOSMaximumTransfersParameter() {
     let limitedRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", maxTransfers: 0)
     let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
 
-    #expect(limitedRequest.queryItems.contains(URLQueryItem(name: "AdvancedForm.MaxChange", value: "0")))
-    #expect(!normalRequest.queryItems.contains { $0.name == "AdvancedForm.MaxChange" })
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxChange", value: "0")))
+    #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.MaxChange" })
 }
 
 @Test func jsonpParserDecodesCallbackPayload() throws {
@@ -231,6 +250,7 @@ import Testing
 }
 
 private struct MockIDOSClient: IDOSClienting {
+    var expectedIsArrival = false
     var expectedOnlyDirect = false
     var expectedMaxTransfers: Int? = nil
 
@@ -254,6 +274,7 @@ private struct MockIDOSClient: IDOSClienting {
 
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection] {
         #expect(request.timetable.slug == "vlaky")
+        #expect(request.isArrival == expectedIsArrival)
         #expect(request.onlyDirect == expectedOnlyDirect)
         #expect(request.maxTransfers == expectedMaxTransfers)
 
