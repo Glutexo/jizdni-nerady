@@ -12,8 +12,10 @@ import Testing
     let output = await CommandRunner(client: MockIDOSClient()).output(for: ["--help"])
 
     #expect(output.contains("Použití:"))
-    #expect(output.contains("spojeni"))
+    #expect(output.contains("connections"))
+    #expect(output.contains("timetables"))
     #expect(output.contains("--timetable"))
+    #expect(!output.contains("--jr"))
     #expect(output.contains("--version"))
 }
 
@@ -33,7 +35,7 @@ import Testing
 
 @Test func connectionCommandPrintsConnections() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
-        for: ["spojeni", "--from", "Praha", "--to", "Brno", "--jr", "vlaky", "--limit", "1"]
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--limit", "1"]
     )
 
     #expect(output.contains("Spojení Praha -> Brno (Vlaky)"))
@@ -42,7 +44,7 @@ import Testing
 }
 
 @Test func timetablesCommandPrintsCommonAliases() async {
-    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["jizdni-rady"])
+    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables"])
 
     #expect(output.contains("vlakyautobusymhdvse"))
     #expect(output.contains("pid"))

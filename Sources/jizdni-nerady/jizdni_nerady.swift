@@ -43,9 +43,9 @@ struct CommandRunner {
             switch command {
             case "suggest":
                 return try await suggestOutput(for: Array(arguments.dropFirst()))
-            case "spojeni":
+            case "connections":
                 return try await connectionsOutput(for: Array(arguments.dropFirst()))
-            case "jizdni-rady", "jr":
+            case "timetables":
                 return timetablesOutput
             default:
                 return "Neznámý příkaz: \(command)\n\n\(helpText)"
@@ -88,11 +88,11 @@ struct CommandRunner {
         let timetable = try options.timetable()
 
         guard let from = options.value(for: "--from", short: "-f"), !from.isEmpty else {
-            return "Použití: jizdni-nerady spojeni --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]"
+            return "Použití: jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]"
         }
 
         guard let to = options.value(for: "--to", short: "-t"), !to.isEmpty else {
-            return "Použití: jizdni-nerady spojeni --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]"
+            return "Použití: jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]"
         }
 
         let request = IDOSConnectionRequest(
@@ -137,14 +137,14 @@ struct CommandRunner {
         """
         Použití:
           jizdni-nerady suggest <text> [--timetable alias] [--limit počet]
-          jizdni-nerady spojeni --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]
-          jizdni-nerady jizdni-rady
+          jizdni-nerady connections --from místo --to místo [--timetable alias] [--date d.m.rrrr] [--time h:mm] [--limit počet]
+          jizdni-nerady timetables
 
         Volby:
           -h, --help     Zobrazí nápovědu
           --version      Zobrazí verzi aplikace
 
-        Výchozí jízdní řád je vlakyautobusymhdvse. Alias --jr lze použít místo --timetable.
+        Výchozí jízdní řád je vlakyautobusymhdvse.
         """
     }
 }
@@ -201,6 +201,6 @@ private struct CommandOptions {
     }
 
     func timetable() throws -> IDOSTimetable {
-        try IDOSTimetable.resolve(value(for: "--timetable") ?? value(for: "--jr"))
+        try IDOSTimetable.resolve(value(for: "--timetable"))
     }
 }
