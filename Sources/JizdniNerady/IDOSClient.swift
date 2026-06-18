@@ -3,15 +3,19 @@ import Foundation
 import FoundationNetworking
 #endif
 
-protocol IDOSClienting {
+public protocol IDOSClienting: Sendable {
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion]
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection]
 }
 
-struct IDOSClient: IDOSClienting {
-    var baseURL = URL(string: "https://idos.cz")!
+public struct IDOSClient: IDOSClienting {
+    public var baseURL: URL
 
-    func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
+    public init(baseURL: URL = URL(string: "https://idos.cz")!) {
+        self.baseURL = baseURL
+    }
+
+    public func suggest(prefix: String, limit: Int = 8, timetable: IDOSTimetable = .defaultTimetable) async throws -> [IDOSSuggestion] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/\(timetable.slug)/Ajax/SearchTimetableObjects/"
         components.queryItems = [
@@ -30,7 +34,7 @@ struct IDOSClient: IDOSClienting {
         return try JSONDecoder().decode([IDOSSuggestion].self, from: json)
     }
 
-    func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection] {
+    public func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/\(request.timetable.slug)/spojeni/"
         components.queryItems = request.queryItems
@@ -70,12 +74,26 @@ struct IDOSClient: IDOSClienting {
     }
 }
 
-struct IDOSConnectionRequest: Equatable {
-    var timetable: IDOSTimetable
-    var from: String
-    var to: String
-    var date: String?
-    var time: String?
+public struct IDOSConnectionRequest: Equatable, Sendable {
+    public var timetable: IDOSTimetable
+    public var from: String
+    public var to: String
+    public var date: String?
+    public var time: String?
+
+    public init(
+        timetable: IDOSTimetable = .defaultTimetable,
+        from: String,
+        to: String,
+        date: String? = nil,
+        time: String? = nil
+    ) {
+        self.timetable = timetable
+        self.from = from
+        self.to = to
+        self.date = date
+        self.time = time
+    }
 
     var queryItems: [URLQueryItem] {
         [
@@ -88,13 +106,18 @@ struct IDOSConnectionRequest: Equatable {
     }
 }
 
-struct IDOSTimetable: Equatable {
-    var slug: String
-    var displayName: String
+public struct IDOSTimetable: Equatable, Sendable {
+    public var slug: String
+    public var displayName: String
 
-    static let defaultTimetable = IDOSTimetable(slug: "vlakyautobusymhdvse", displayName: "Vše")
+    public init(slug: String, displayName: String) {
+        self.slug = slug
+        self.displayName = displayName
+    }
 
-    static var known: [IDOSTimetable] {
+    public static let defaultTimetable = IDOSTimetable(slug: "vlakyautobusymhdvse", displayName: "Vše")
+
+    public static var known: [IDOSTimetable] {
         baseTimetables + mhdNames
             .filter { !unsupportedMHDNames.contains($0) }
             .map { name in
@@ -117,7 +140,7 @@ struct IDOSTimetable: Equatable {
         IDOSTimetable(slug: "idol", displayName: "IDOL"),
     ]
 
-    static func resolve(_ value: String?) throws -> IDOSTimetable {
+    public static func resolve(_ value: String?) throws -> IDOSTimetable {
         guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return .defaultTimetable
         }
@@ -334,30 +357,72 @@ struct IDOSTimetable: Equatable {
     ]
 }
 
-struct IDOSSuggestion: Codable, Equatable {
-    var selectedText: String?
-    var text: String
-    var description: String?
-    var region: String?
-    var value: String?
-    var value2: String?
-    var iconId: Int?
-    var coorX: Double?
-    var coorY: Double?
+public struct IDOSSuggestion: Codable, Equatable, Sendable {
+    public var selectedText: String?
+    public var text: String
+    public var description: String?
+    public var region: String?
+    public var value: String?
+    public var value2: String?
+    public var iconId: Int?
+    public var coorX: Double?
+    public var coorY: Double?
+
+    public init(
+        selectedText: String? = nil,
+        text: String,
+        description: String? = nil,
+        region: String? = nil,
+        value: String? = nil,
+        value2: String? = nil,
+        iconId: Int? = nil,
+        coorX: Double? = nil,
+        coorY: Double? = nil
+    ) {
+        self.selectedText = selectedText
+        self.text = text
+        self.description = description
+        self.region = region
+        self.value = value
+        self.value2 = value2
+        self.iconId = iconId
+        self.coorX = coorX
+        self.coorY = coorY
+    }
 }
 
-struct IDOSConnection: Equatable {
-    var id: String
-    var departureTime: String
-    var departureStation: String
-    var arrivalTime: String
-    var arrivalStation: String
-    var duration: String
-    var legs: [IDOSConnectionLeg]
-    var shareURL: String?
+public struct IDOSConnection: Equatable, Sendable {
+    public var id: String
+    public var departureTime: String
+    public var departureStation: String
+    public var arrivalTime: String
+    public var arrivalStation: String
+    public var duration: String
+    public var legs: [IDOSConnectionLeg]
+    public var shareURL: String?
 
-    func summaryLine(number: Int) -> String {
-        var result = "\(number). \(departureTime) \(departureStation) -> \(arrivalTime) \(arrivalStation)"
+    public init(
+        id: String,
+        departureTime: String,
+        departureStation: String,
+        arrivalTime: String,
+        arrivalStation: String,
+        duration: String,
+        legs: [IDOSConnectionLeg],
+        shareURL: String? = nil
+    ) {
+        self.id = id
+        self.departureTime = departureTime
+        self.departureStation = departureStation
+        self.arrivalTime = arrivalTime
+        self.arrivalStation = arrivalStation
+        self.duration = duration
+        self.legs = legs
+        self.shareURL = shareURL
+    }
+
+    public func summaryLine(number: Int) -> String {
+        var result = "\(number). \(departureTime) \(departureStation) → \(arrivalTime) \(arrivalStation)"
 
         if !duration.isEmpty {
             result += " (\(duration))"
@@ -365,7 +430,7 @@ struct IDOSConnection: Equatable {
 
         if !legs.isEmpty {
             let legSummary = legs.map { leg in
-                [leg.coloredName, leg.fromStation, leg.departureTime, "->", leg.arrivalTime, leg.toStation]
+                [leg.coloredName, leg.fromStation, leg.departureTime, "→", leg.arrivalTime, leg.toStation]
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
             }.joined(separator: "; ")
@@ -376,26 +441,42 @@ struct IDOSConnection: Equatable {
     }
 }
 
-struct IDOSConnectionLeg: Equatable {
-    var name: String
-    var color: String? = nil
-    var departureTime: String
-    var fromStation: String
-    var arrivalTime: String
-    var toStation: String
+public struct IDOSConnectionLeg: Equatable, Sendable {
+    public var name: String
+    public var color: String?
+    public var departureTime: String
+    public var fromStation: String
+    public var arrivalTime: String
+    public var toStation: String
+
+    public init(
+        name: String,
+        color: String? = nil,
+        departureTime: String,
+        fromStation: String,
+        arrivalTime: String,
+        toStation: String
+    ) {
+        self.name = name
+        self.color = color
+        self.departureTime = departureTime
+        self.fromStation = fromStation
+        self.arrivalTime = arrivalTime
+        self.toStation = toStation
+    }
 
     var coloredName: String {
         TerminalColor.color(name, htmlColor: color)
     }
 }
 
-enum IDOSError: LocalizedError {
+public enum IDOSError: LocalizedError, Sendable {
     case invalidResponse
     case invalidURL
     case invalidJSONP
     case invalidTimetable(String)
 
-    var errorDescription: String? {
+    public var errorDescription: String? {
         switch self {
         case .invalidResponse:
             return "IDOS vrátil neočekávanou odpověď."

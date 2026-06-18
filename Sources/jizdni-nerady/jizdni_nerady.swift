@@ -1,4 +1,5 @@
 import Foundation
+import JizdniNerady
 #if canImport(FoundationNetworking)
 import FoundationNetworking
 #endif
@@ -115,7 +116,7 @@ struct CommandRunner {
         }
 
         return """
-        Spojení \(from) -> \(to) (\(timetable.displayName)):
+        Spojení \(from) → \(to) (\(timetable.displayName)):
         \(rows.joined(separator: "\n"))
         """
     }

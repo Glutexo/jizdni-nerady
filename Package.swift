@@ -9,15 +9,20 @@ let package = Package(
         .macOS(.v12),
     ],
     products: [
+        .library(name: "JizdniNerady", targets: ["JizdniNerady"]),
         .executable(name: "jizdni-nerady", targets: ["jizdni-nerady"]),
     ],
     targets: [
+        .target(
+            name: "JizdniNerady"
+        ),
         .executableTarget(
-            name: "jizdni-nerady"
+            name: "jizdni-nerady",
+            dependencies: ["JizdniNerady"]
         ),
         .testTarget(
             name: "jizdni-neradyTests",
-            dependencies: ["jizdni-nerady"]
+            dependencies: ["JizdniNerady", "jizdni-nerady"]
         ),
     ],
     swiftLanguageModes: [.v6]

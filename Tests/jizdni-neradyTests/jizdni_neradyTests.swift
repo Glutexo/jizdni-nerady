@@ -1,4 +1,5 @@
 import Foundation
+@testable import JizdniNerady
 import Testing
 @testable import jizdni_nerady
 
@@ -38,8 +39,8 @@ import Testing
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--limit", "1"]
     )
 
-    #expect(output.contains("Spojení Praha -> Brno (Vlaky)"))
-    #expect(output.contains("12:04 Praha hl.n. -> 15:44 Brno hl.n."))
+    #expect(output.contains("Spojení Praha → Brno (Vlaky)"))
+    #expect(output.contains("12:04 Praha hl.n. → 15:44 Brno hl.n."))
     #expect(output.contains("R9"))
 }
 

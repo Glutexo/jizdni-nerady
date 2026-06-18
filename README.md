@@ -1,6 +1,6 @@
 # jizdni-nerady
 
-Jízdní neřády jsou osobní Swift CLI pro občasné jednorázové dotazy do IDOSu.
+Jízdní neřády jsou osobní Swift CLI a importovatelná Swift knihovna pro občasné jednorázové dotazy do IDOSu.
 Používají veřejně dostupné URL rozhraní webu IDOS a parsují vrácené HTML, takže nejde o stabilní ani garantované datové API.
 
 ## Použití
@@ -46,6 +46,25 @@ swift run jizdni-nerady timetables
 Parametr přijímá také vlastní URL slug IDOSu, například `karlovyvary`, pokud ho IDOS podporuje. Kromě slugů fungují i názvy z katalogu, například `--timetable "MHD Karlovy Vary"` nebo `--timetable "Zlín a Otrokovice"`.
 
 Nástroj je určený pro nízkofrekvenční osobní použití. Pokud IDOS změní HTML nebo interní JSONP našeptávač, parser bude potřeba upravit.
+
+## Swift knihovna
+
+Package exportuje knihovní produkt `JizdniNerady`:
+
+```swift
+import JizdniNerady
+
+let client = IDOSClient()
+let timetable = try IDOSTimetable.resolve("odis")
+let request = IDOSConnectionRequest(
+    timetable: timetable,
+    from: "Frýdek,Na Veselé",
+    to: "Ostrava,Hrabůvka,Benzina"
+)
+let connections = try await client.findConnections(request: request)
+```
+
+Veřejné API zahrnuje `IDOSClient`, `IDOSConnectionRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg` a `IDOSError`.
 
 ## Vývoj
 
