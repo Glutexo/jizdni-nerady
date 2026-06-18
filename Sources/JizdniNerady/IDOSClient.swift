@@ -454,8 +454,9 @@ public struct IDOSConnection: Codable, Equatable, Sendable {
                 [leg.displayName, leg.fromStation, leg.departureTime, "→", leg.arrivalTime, leg.toStation]
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
-            }.joined(separator: "; ")
-            result += "\n   \(legSummary)"
+            }.map { "   \($0)" }
+                .joined(separator: "\n")
+            result += "\n\(legSummary)"
         }
 
         return result

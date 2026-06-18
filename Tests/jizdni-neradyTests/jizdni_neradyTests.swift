@@ -262,14 +262,17 @@ import Testing
     """
 
     let connection = IDOSConnectionParser.parse(html: html).first
+    let summary = connection?.summaryLine(number: 1)
 
     #expect(connection?.legs.map(\.name) == ["Bus 302", "Bus 980"])
     #expect(connection?.legs.map(\.color) == ["#0000FF", "#0000FF"])
     #expect(connection?.legs.map(\.transportMode) == [.bus, .bus])
-    #expect(connection?.summaryLine(number: 1).contains("🚌") == true)
-    #expect(connection?.summaryLine(number: 1).contains("\u{001B}[38;2;0;0;255mBus 302") == true)
-    #expect(connection?.summaryLine(number: 1).contains("style=") == false)
-    #expect(connection?.summaryLine(number: 1).contains("Transdev") == false)
+    #expect(summary?.contains("🚌") == true)
+    #expect(summary?.contains("\u{001B}[38;2;0;0;255mBus 302") == true)
+    #expect(summary?.contains("\n   🚌 \u{001B}[38;2;0;0;255mBus 980") == true)
+    #expect(summary?.contains("; 🚌") == false)
+    #expect(summary?.contains("style=") == false)
+    #expect(summary?.contains("Transdev") == false)
 }
 
 @Test func connectionParserInfersTrainFromRailLinePrefix() {
