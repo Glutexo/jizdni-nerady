@@ -79,11 +79,11 @@ struct CommandRunner {
         let timetable = try options.timetable()
 
         guard let from = options.value(for: "--from", short: "-f"), !from.isEmpty else {
-            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]")
+            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
         }
 
         guard let to = options.value(for: "--to", short: "-t"), !to.isEmpty else {
-            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]")
+            throw CommandError.usage("Usage: jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
         }
 
         let request = IDOSConnectionRequest(
@@ -94,7 +94,8 @@ struct CommandRunner {
             time: options.value(for: "--time"),
             isArrival: try options.isArrivalTimeMode(),
             onlyDirect: options.contains("--direct") || options.contains("--only-direct"),
-            maxTransfers: try options.nonNegativeIntegerValue(for: "--max-transfers")
+            maxTransfers: try options.nonNegativeIntegerValue(for: "--max-transfers"),
+            minimumTransferTime: try options.nonNegativeIntegerValue(for: "--min-transfer-time")
         )
         let limit = options.integerValue(for: "--limit") ?? 5
         let connections = try await client.findConnections(request: request)
@@ -113,7 +114,7 @@ struct CommandRunner {
         """
         🚆 Usage:
           jizdni-nerady suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--format text|markdown|json] [--limit count]
+          jizdni-nerady connections --from place --to place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
           jizdni-nerady timetables [--format text|markdown|json]
 
         ⚙️ Options:
@@ -123,6 +124,7 @@ struct CommandRunner {
           --departure             Search by departure time
           --direct, --only-direct Direct connections only
           --max-transfers         Maximum transfers permitted, including 0
+          --min-transfer-time     Minimum transfer time in minutes, including 0
           --format                Output format: text, markdown, or json
 
         Default timetable is vlakyautobusymhdvse.

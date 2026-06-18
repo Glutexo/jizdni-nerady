@@ -57,6 +57,12 @@ Limit the maximum transfers permitted, including `0`:
 swift run jizdni-nerady connections --from Praha --to Brno --max-transfers 0
 ```
 
+Require a minimum transfer time in minutes, including `0`:
+
+```sh
+swift run jizdni-nerady connections --from Praha --to Brno --min-transfer-time 10
+```
+
 ### Timetable
 
 The default timetable is `vlakyautobusymhdvse`, IDOS English `All timetables`. Select another timetable with `--timetable`:
@@ -92,7 +98,8 @@ let request = IDOSConnectionRequest(
     to: "Ostrava,Hrabůvka,Benzina",
     isArrival: true,
     onlyDirect: true,
-    maxTransfers: 0
+    maxTransfers: 0,
+    minimumTransferTime: 10
 )
 let connections = try await client.findConnections(request: request)
 ```

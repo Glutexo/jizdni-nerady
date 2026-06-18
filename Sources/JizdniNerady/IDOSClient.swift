@@ -95,6 +95,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
     public var isArrival: Bool
     public var onlyDirect: Bool
     public var maxTransfers: Int?
+    public var minimumTransferTime: Int?
 
     public init(
         timetable: IDOSTimetable = .defaultTimetable,
@@ -104,7 +105,8 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         time: String? = nil,
         isArrival: Bool = false,
         onlyDirect: Bool = false,
-        maxTransfers: Int? = nil
+        maxTransfers: Int? = nil,
+        minimumTransferTime: Int? = nil
     ) {
         self.timetable = timetable
         self.from = from
@@ -114,19 +116,42 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         self.isArrival = isArrival
         self.onlyDirect = onlyDirect
         self.maxTransfers = maxTransfers
+        self.minimumTransferTime = minimumTransferTime
     }
 
     var formItems: [URLQueryItem] {
-        [
+        var items = [
             URLQueryItem(name: "From", value: from),
             URLQueryItem(name: "To", value: to),
-            date.map { URLQueryItem(name: "Date", value: $0) },
-            time.map { URLQueryItem(name: "Time", value: $0) },
             URLQueryItem(name: "IsArr", value: isArrival ? "True" : "False"),
-            onlyDirect ? URLQueryItem(name: "OnlyDirect", value: "true") : nil,
-            maxTransfers.map { URLQueryItem(name: "AdvancedForm.MaxChange", value: String($0)) },
-            URLQueryItem(name: "submit", value: "true"),
-        ].compactMap(\.self)
+        ]
+
+        if let date {
+            items.append(URLQueryItem(name: "Date", value: date))
+        }
+
+        if let time {
+            items.append(URLQueryItem(name: "Time", value: time))
+        }
+
+        if onlyDirect {
+            items.append(URLQueryItem(name: "OnlyDirect", value: "true"))
+        }
+
+        if maxTransfers != nil || minimumTransferTime != nil {
+            items.append(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True"))
+        }
+
+        if let maxTransfers {
+            items.append(URLQueryItem(name: "AdvancedForm.MaxChange", value: String(maxTransfers)))
+        }
+
+        if let minimumTransferTime {
+            items.append(URLQueryItem(name: "AdvancedForm.MinTime", value: String(minimumTransferTime)))
+        }
+
+        items.append(URLQueryItem(name: "submit", value: "true"))
+        return items
     }
 }
 

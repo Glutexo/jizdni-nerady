@@ -21,6 +21,7 @@ import Testing
     #expect(output.contains("--departure"))
     #expect(output.contains("--direct"))
     #expect(output.contains("--max-transfers"))
+    #expect(output.contains("--min-transfer-time"))
     #expect(output.contains("--format"))
     #expect(output.contains("Direct connections only"))
     #expect(!output.contains("--jr"))
@@ -73,11 +74,13 @@ import Testing
     #expect(output.contains(#"🚆 <span style="color: #008000">R9 (R 981 Vysočina)</span>"#))
 }
 
-@Test func connectionCommandPrintsJSONWithMaximumTransfers() async throws {
-    let output = await CommandRunner(client: MockIDOSClient(expectedIsArrival: true, expectedMaxTransfers: 0)).output(
+@Test func connectionCommandPrintsJSONWithTransferLimits() async throws {
+    let output = await CommandRunner(
+        client: MockIDOSClient(expectedIsArrival: true, expectedMaxTransfers: 0, expectedMinimumTransferTime: 10)
+    ).output(
         for: [
             "connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky",
-            "--arrival", "--max-transfers", "0", "--format", "json", "--limit", "1",
+            "--arrival", "--max-transfers", "0", "--min-transfer-time", "10", "--format", "json", "--limit", "1",
         ]
     )
     let json = try jsonDictionary(output)
@@ -85,6 +88,7 @@ import Testing
 
     #expect(request?["isArrival"] as? Bool == true)
     #expect(request?["maxTransfers"] as? Int == 0)
+    #expect(request?["minimumTransferTime"] as? Int == 10)
     #expect((json["connections"] as? [[String: Any]])?.first?["id"] as? String == "396829589")
 }
 
@@ -132,12 +136,29 @@ import Testing
     #expect(output.contains("R9"))
 }
 
+@Test func connectionCommandSetsMinimumTransferTime() async {
+    let output = await CommandRunner(client: MockIDOSClient(expectedMinimumTransferTime: 10)).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--min-transfer-time", "10", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
 @Test func connectionCommandRejectsNegativeMaximumTransfers() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--max-transfers", "-1"]
     )
 
     #expect(output.contains("❌ Error: Invalid --max-transfers: -1. Use a non-negative integer."))
+}
+
+@Test func connectionCommandRejectsNegativeMinimumTransferTime() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--min-transfer-time", "-1"]
+    )
+
+    #expect(output.contains("❌ Error: Invalid --min-transfer-time: -1. Use a non-negative integer."))
 }
 
 @Test func timetablesCommandPrintsCommonAliases() async {
@@ -202,8 +223,20 @@ import Testing
     let limitedRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", maxTransfers: 0)
     let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
 
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True")))
     #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MaxChange", value: "0")))
+    #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.AdvancedFormIsOpen" })
     #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.MaxChange" })
+}
+
+@Test func connectionRequestUsesIDOSMinimumTransferTimeParameter() {
+    let limitedRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", minimumTransferTime: 10)
+    let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
+
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.AdvancedFormIsOpen", value: "True")))
+    #expect(limitedRequest.formItems.contains(URLQueryItem(name: "AdvancedForm.MinTime", value: "10")))
+    #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.AdvancedFormIsOpen" })
+    #expect(!normalRequest.formItems.contains { $0.name == "AdvancedForm.MinTime" })
 }
 
 @Test func jsonpParserDecodesCallbackPayload() throws {
@@ -295,6 +328,7 @@ private struct MockIDOSClient: IDOSClienting {
     var expectedIsArrival = false
     var expectedOnlyDirect = false
     var expectedMaxTransfers: Int? = nil
+    var expectedMinimumTransferTime: Int? = nil
 
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
         #expect(timetable.slug == "pid")
@@ -319,6 +353,7 @@ private struct MockIDOSClient: IDOSClienting {
         #expect(request.isArrival == expectedIsArrival)
         #expect(request.onlyDirect == expectedOnlyDirect)
         #expect(request.maxTransfers == expectedMaxTransfers)
+        #expect(request.minimumTransferTime == expectedMinimumTransferTime)
 
         return [
             IDOSConnection(
