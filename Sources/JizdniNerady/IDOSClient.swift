@@ -81,6 +81,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
     public var date: String?
     public var time: String?
     public var onlyDirect: Bool
+    public var maxTransfers: Int?
 
     public init(
         timetable: IDOSTimetable = .defaultTimetable,
@@ -88,7 +89,8 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         to: String,
         date: String? = nil,
         time: String? = nil,
-        onlyDirect: Bool = false
+        onlyDirect: Bool = false,
+        maxTransfers: Int? = nil
     ) {
         self.timetable = timetable
         self.from = from
@@ -96,6 +98,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
         self.date = date
         self.time = time
         self.onlyDirect = onlyDirect
+        self.maxTransfers = maxTransfers
     }
 
     var queryItems: [URLQueryItem] {
@@ -105,6 +108,7 @@ public struct IDOSConnectionRequest: Codable, Equatable, Sendable {
             date.map { URLQueryItem(name: "date", value: $0) },
             time.map { URLQueryItem(name: "time", value: $0) },
             onlyDirect ? URLQueryItem(name: "OnlyDirect", value: "true") : nil,
+            maxTransfers.map { URLQueryItem(name: "AdvancedForm.MaxChange", value: String($0)) },
             URLQueryItem(name: "submit", value: "true"),
         ].compactMap(\.self)
     }

@@ -18,6 +18,7 @@ import Testing
     #expect(output.contains("timetables"))
     #expect(output.contains("--timetable"))
     #expect(output.contains("--direct"))
+    #expect(output.contains("--max-transfers"))
     #expect(output.contains("--format"))
     #expect(output.contains("Direct connections only"))
     #expect(!output.contains("--jr"))
@@ -69,6 +70,20 @@ import Testing
     #expect(output.contains(#"<span style="color: #008000">R9 (R 981 Vysočina)</span>"#))
 }
 
+@Test func connectionCommandPrintsJSONWithMaximumTransfers() async throws {
+    let output = await CommandRunner(client: MockIDOSClient(expectedMaxTransfers: 0)).output(
+        for: [
+            "connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky",
+            "--max-transfers", "0", "--format", "json", "--limit", "1",
+        ]
+    )
+    let json = try jsonDictionary(output)
+    let request = json["request"] as? [String: Any]
+
+    #expect(request?["maxTransfers"] as? Int == 0)
+    #expect((json["connections"] as? [[String: Any]])?.first?["id"] as? String == "396829589")
+}
+
 @Test func connectionCommandRequestsDirectConnections() async {
     let output = await CommandRunner(client: MockIDOSClient(expectedOnlyDirect: true)).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--direct", "--limit", "1"]
@@ -76,6 +91,23 @@ import Testing
 
     #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
     #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandLimitsMaximumTransfers() async {
+    let output = await CommandRunner(client: MockIDOSClient(expectedMaxTransfers: 0)).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--max-transfers", "0", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandRejectsNegativeMaximumTransfers() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--max-transfers", "-1"]
+    )
+
+    #expect(output.contains("❌ Error: Invalid --max-transfers: -1. Use a non-negative integer."))
 }
 
 @Test func timetablesCommandPrintsCommonAliases() async {
@@ -126,6 +158,14 @@ import Testing
 
     #expect(directRequest.queryItems.contains(URLQueryItem(name: "OnlyDirect", value: "true")))
     #expect(!normalRequest.queryItems.contains { $0.name == "OnlyDirect" })
+}
+
+@Test func connectionRequestUsesIDOSMaximumTransfersParameter() {
+    let limitedRequest = IDOSConnectionRequest(from: "Praha", to: "Brno", maxTransfers: 0)
+    let normalRequest = IDOSConnectionRequest(from: "Praha", to: "Brno")
+
+    #expect(limitedRequest.queryItems.contains(URLQueryItem(name: "AdvancedForm.MaxChange", value: "0")))
+    #expect(!normalRequest.queryItems.contains { $0.name == "AdvancedForm.MaxChange" })
 }
 
 @Test func jsonpParserDecodesCallbackPayload() throws {
@@ -192,6 +232,7 @@ import Testing
 
 private struct MockIDOSClient: IDOSClienting {
     var expectedOnlyDirect = false
+    var expectedMaxTransfers: Int? = nil
 
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
         #expect(timetable.slug == "pid")
@@ -214,6 +255,7 @@ private struct MockIDOSClient: IDOSClienting {
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection] {
         #expect(request.timetable.slug == "vlaky")
         #expect(request.onlyDirect == expectedOnlyDirect)
+        #expect(request.maxTransfers == expectedMaxTransfers)
 
         return [
             IDOSConnection(

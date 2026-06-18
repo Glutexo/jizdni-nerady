@@ -43,6 +43,12 @@ Search direct connections only:
 swift run jizdni-nerady connections --from Praha --to Brno --direct
 ```
 
+Limit the maximum transfers permitted, including `0`:
+
+```sh
+swift run jizdni-nerady connections --from Praha --to Brno --max-transfers 0
+```
+
 ### Timetable
 
 The default timetable is `vlakyautobusymhdvse`, IDOS English `All timetables`. Select another timetable with `--timetable`:
@@ -76,7 +82,8 @@ let request = IDOSConnectionRequest(
     timetable: timetable,
     from: "Frýdek,Na Veselé",
     to: "Ostrava,Hrabůvka,Benzina",
-    onlyDirect: true
+    onlyDirect: true,
+    maxTransfers: 0
 )
 let connections = try await client.findConnections(request: request)
 ```
