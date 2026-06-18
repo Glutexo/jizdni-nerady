@@ -92,16 +92,10 @@ struct CommandRunner {
         let format = try options.outputFormat()
         let aliasDatabase = try aliasFile.load()
 
-        guard let from = options.value(for: "--from", short: "-f"), !from.isEmpty else {
-            throw CommandError.usage("Usage: kastan connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
-        }
+        let endpoints = try connectionEndpoints(from: options.value(for: "--from", short: "-f"), to: options.value(for: "--to", short: "-t"), positional: options.positional)
 
-        guard let to = options.value(for: "--to", short: "-t"), !to.isEmpty else {
-            throw CommandError.usage("Usage: kastan connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]")
-        }
-
-        let fromPlace = resolvePlace(from, in: aliasDatabase)
-        let toPlace = resolvePlace(to, in: aliasDatabase)
+        let fromPlace = resolvePlace(endpoints.from, in: aliasDatabase)
+        let toPlace = resolvePlace(endpoints.to, in: aliasDatabase)
         let viaPlaces = options.values(for: "--via").map { resolvePlace($0, in: aliasDatabase) }
         let timetable = try resolveTimetable(
             explicitValue: options.value(for: "--timetable"),
@@ -271,11 +265,60 @@ struct CommandRunner {
         return first
     }
 
+    private func connectionEndpoints(from: String?, to: String?, positional: [String]) throws -> ConnectionEndpoints {
+        let from = from?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let to = to?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let from, !from.isEmpty, let to, !to.isEmpty {
+            return ConnectionEndpoints(from: from, to: to)
+        }
+
+        if from?.isEmpty == false || to?.isEmpty == false {
+            throw CommandError.usage(connectionUsage)
+        }
+
+        let expression = positional.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expression.isEmpty, let endpoints = parseConnectionExpression(expression) else {
+            throw CommandError.usage(connectionUsage)
+        }
+
+        return endpoints
+    }
+
+    private func parseConnectionExpression(_ expression: String) -> ConnectionEndpoints? {
+        for delimiter in ["->", "→"] {
+            if let endpoints = splitConnectionExpression(expression, delimiter: delimiter, useLastMatch: false) {
+                return endpoints
+            }
+        }
+
+        return splitConnectionExpression(expression, delimiter: "-", useLastMatch: true)
+    }
+
+    private func splitConnectionExpression(_ expression: String, delimiter: String, useLastMatch: Bool) -> ConnectionEndpoints? {
+        let range = useLastMatch ? expression.range(of: delimiter, options: .backwards) : expression.range(of: delimiter)
+        guard let range else {
+            return nil
+        }
+
+        let from = String(expression[..<range.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let to = String(expression[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !from.isEmpty, !to.isEmpty else {
+            return nil
+        }
+
+        return ConnectionEndpoints(from: from, to: to)
+    }
+
+    private var connectionUsage: String {
+        "Usage: kastan connections route|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]"
+    }
+
     private var helpText: String {
         """
         🌰 Usage:
           kastan suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          kastan connections --from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
+          kastan connections route|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
           kastan departures --station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
           kastan aliases list|add|remove|path [--format text|markdown|json]
           kastan timetables [--format text|markdown|json]
@@ -680,6 +723,11 @@ private struct StopAliasPathOutput: Codable {
 private struct ResolvedPlace {
     var station: String
     var alias: StopAlias?
+}
+
+private struct ConnectionEndpoints {
+    var from: String
+    var to: String
 }
 
 private struct ErrorOutput: Codable {

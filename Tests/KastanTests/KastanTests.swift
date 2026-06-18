@@ -86,6 +86,33 @@ import Testing
     #expect(output.contains("R9"))
 }
 
+@Test func connectionCommandAcceptsHyphenRouteExpression() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "Praha-Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandAcceptsAsciiArrowRouteExpression() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "Praha->Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandAcceptsUnicodeArrowRouteExpression() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "Praha→Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
 @Test func connectionCommandPrintsMarkdown() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--format", "markdown", "--limit", "1"]
@@ -353,6 +380,25 @@ import Testing
         ),
         aliasFile: aliasFile
     ).output(for: ["connections", "--from", "home", "--to", "work", "--limit", "1"])
+
+    #expect(output.contains("🧭 Connections Frýdek,Na Veselé → Ostrava,Hrabůvka,Benzina (ODIS)"))
+}
+
+@Test func connectionCommandUsesStopAliasesInRouteExpression() async throws {
+    let aliasFile = temporaryAliasFile()
+    var database = StopAliasDatabase()
+    try database.upsert(StopAlias(name: "home", station: "Frýdek,Na Veselé", timetable: try IDOSTimetable.resolve("odis")))
+    try database.upsert(StopAlias(name: "work", station: "Ostrava,Hrabůvka,Benzina", timetable: try IDOSTimetable.resolve("odis")))
+    try aliasFile.save(database)
+
+    let output = await CommandRunner(
+        client: MockIDOSClient(
+            expectedConnectionTimetable: "odis",
+            expectedFrom: "Frýdek,Na Veselé",
+            expectedTo: "Ostrava,Hrabůvka,Benzina"
+        ),
+        aliasFile: aliasFile
+    ).output(for: ["connections", "home→work", "--limit", "1"])
 
     #expect(output.contains("🧭 Connections Frýdek,Na Veselé → Ostrava,Hrabůvka,Benzina (ODIS)"))
 }

@@ -17,6 +17,9 @@ Search connections:
 ```sh
 swift run kastan connections --from Praha --to Brno --date 18.6.2026 --time 12:00
 swift run kastan connections --from "Frýdek-Místek" --to Ostrava --timetable odis
+swift run kastan connections Praha-Brno --time 12:00
+swift run kastan connections "Praha -> Brno"
+swift run kastan connections "Praha → Brno"
 ```
 
 Search station departures:
@@ -97,6 +100,7 @@ Aliases can be used anywhere a station or place is accepted:
 
 ```sh
 swift run kastan connections --from home --to work --time 16:00
+swift run kastan connections home→work --time 16:00
 swift run kastan departures --station work --time 16:00
 ```
 
