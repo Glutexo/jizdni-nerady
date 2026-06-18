@@ -361,10 +361,11 @@ private enum Markdown {
 
     static func lineName(_ leg: IDOSConnectionLeg) -> String {
         let name = htmlEscape(leg.name)
+        let prefix = leg.transportMode.map { "\($0.emoji) " } ?? ""
         guard let color = leg.color, !color.isEmpty else {
-            return escape(leg.name)
+            return "\(prefix)\(escape(leg.name))"
         }
-        return "<span style=\"color: \(htmlEscape(color))\">\(name)</span>"
+        return "\(prefix)<span style=\"color: \(htmlEscape(color))\">\(name)</span>"
     }
 
     private static func htmlEscape(_ value: String) -> String {

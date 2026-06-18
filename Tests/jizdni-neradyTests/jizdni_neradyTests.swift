@@ -59,6 +59,7 @@ import Testing
 
     #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
     #expect(output.contains("12:04 Praha hl.n. → 15:44 Brno hl.n."))
+    #expect(output.contains("🚆"))
     #expect(output.contains("R9"))
 }
 
@@ -69,7 +70,7 @@ import Testing
 
     #expect(output.contains("## 🧭 Connections"))
     #expect(output.contains("| Line | From | Departure | To | Arrival |"))
-    #expect(output.contains(#"<span style="color: #008000">R9 (R 981 Vysočina)</span>"#))
+    #expect(output.contains(#"🚆 <span style="color: #008000">R9 (R 981 Vysočina)</span>"#))
 }
 
 @Test func connectionCommandPrintsJSONWithMaximumTransfers() async throws {
@@ -240,6 +241,8 @@ import Testing
     #expect(connections.first?.duration == "3 h 40 min")
     #expect(connections.first?.legs.first?.name == "R9 (R 981 Vysocina)")
     #expect(connections.first?.legs.first?.color == "#FF0000")
+    #expect(connections.first?.legs.first?.transportMode == .train)
+    #expect(connections.first?.summaryLine(number: 1).contains("🚆") == true)
     #expect(connections.first?.summaryLine(number: 1).contains("\u{001B}[38;2;255;0;0mR9") == true)
 }
 
@@ -262,9 +265,27 @@ import Testing
 
     #expect(connection?.legs.map(\.name) == ["Bus 302", "Bus 980"])
     #expect(connection?.legs.map(\.color) == ["#0000FF", "#0000FF"])
+    #expect(connection?.legs.map(\.transportMode) == [.bus, .bus])
+    #expect(connection?.summaryLine(number: 1).contains("🚌") == true)
     #expect(connection?.summaryLine(number: 1).contains("\u{001B}[38;2;0;0;255mBus 302") == true)
     #expect(connection?.summaryLine(number: 1).contains("style=") == false)
     #expect(connection?.summaryLine(number: 1).contains("Transdev") == false)
+}
+
+@Test func connectionParserInfersTrainFromRailLinePrefix() {
+    let html = """
+    <div id="connectionBox-401439022" class="box connection">
+      <p class="reset total">Overall time <strong>2 h 39 min</strong></p>
+      <h3 title="" style="color: #008000;"><span>RJ 1045 RegioJet</span></h3>
+      <p class="reset time" title="">15:01</p><p class="station"><strong class="name ">Praha hl.n.</strong></p>
+      <p class="reset time" title="">17:40</p><p class="station"><strong class="name ">Brno hl.n.</strong></p>
+    </div>
+    """
+
+    let connection = IDOSConnectionParser.parse(html: html).first
+
+    #expect(connection?.legs.first?.transportMode == .train)
+    #expect(connection?.summaryLine(number: 1).contains("🚆") == true)
 }
 
 private struct MockIDOSClient: IDOSClienting {
@@ -308,6 +329,7 @@ private struct MockIDOSClient: IDOSClienting {
                     IDOSConnectionLeg(
                         name: "R9 (R 981 Vysočina)",
                         color: "#008000",
+                        transportMode: .train,
                         departureTime: "12:04",
                         fromStation: "Praha hl.n.",
                         arrivalTime: "15:44",

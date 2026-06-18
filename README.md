@@ -20,6 +20,7 @@ swift run jizdni-nerady connections --from "Frýdek-Místek" --to Ostrava --time
 ```
 
 Line names in connection output use the same terminal color as IDOS sends in the HTML result.
+Connection legs also include transport emoji such as 🚆 for trains and 🚌 for buses when IDOS exposes the transport type.
 
 ### Output Format
 
@@ -96,7 +97,7 @@ let request = IDOSConnectionRequest(
 let connections = try await client.findConnections(request: request)
 ```
 
-The public API includes `IDOSClient`, `IDOSConnectionRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg`, and `IDOSError`.
+The public API includes `IDOSClient`, `IDOSConnectionRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg`, `IDOSTransportMode`, and `IDOSError`.
 
 ## Development
 

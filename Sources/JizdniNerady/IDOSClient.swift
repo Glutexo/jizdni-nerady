@@ -451,7 +451,7 @@ public struct IDOSConnection: Codable, Equatable, Sendable {
 
         if !legs.isEmpty {
             let legSummary = legs.map { leg in
-                [leg.coloredName, leg.fromStation, leg.departureTime, "→", leg.arrivalTime, leg.toStation]
+                [leg.displayName, leg.fromStation, leg.departureTime, "→", leg.arrivalTime, leg.toStation]
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
             }.joined(separator: "; ")
@@ -465,6 +465,7 @@ public struct IDOSConnection: Codable, Equatable, Sendable {
 public struct IDOSConnectionLeg: Codable, Equatable, Sendable {
     public var name: String
     public var color: String?
+    public var transportMode: IDOSTransportMode?
     public var departureTime: String
     public var fromStation: String
     public var arrivalTime: String
@@ -473,6 +474,7 @@ public struct IDOSConnectionLeg: Codable, Equatable, Sendable {
     public init(
         name: String,
         color: String? = nil,
+        transportMode: IDOSTransportMode? = nil,
         departureTime: String,
         fromStation: String,
         arrivalTime: String,
@@ -480,14 +482,104 @@ public struct IDOSConnectionLeg: Codable, Equatable, Sendable {
     ) {
         self.name = name
         self.color = color
+        self.transportMode = transportMode
         self.departureTime = departureTime
         self.fromStation = fromStation
         self.arrivalTime = arrivalTime
         self.toStation = toStation
     }
 
+    public var displayName: String {
+        [transportMode?.emoji, coloredName]
+            .compactMap(\.self)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
     var coloredName: String {
         TerminalColor.color(name, htmlColor: color)
+    }
+}
+
+public enum IDOSTransportMode: String, Codable, Equatable, Sendable {
+    case train
+    case bus
+    case tram
+    case metro
+    case trolleybus
+    case ferry
+    case cableCar
+    case plane
+    case walk
+
+    public var emoji: String {
+        switch self {
+        case .train:
+            return "🚆"
+        case .bus:
+            return "🚌"
+        case .tram:
+            return "🚋"
+        case .metro:
+            return "🚇"
+        case .trolleybus:
+            return "🚎"
+        case .ferry:
+            return "⛴️"
+        case .cableCar:
+            return "🚠"
+        case .plane:
+            return "✈️"
+        case .walk:
+            return "🚶"
+        }
+    }
+
+    static func infer(from text: String) -> IDOSTransportMode? {
+        let normalized = text
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased()
+
+        if normalized.contains("trolleybus") {
+            return .trolleybus
+        }
+
+        if normalized.contains("cable car") || normalized.contains("cableway") || normalized.contains("funicular") {
+            return .cableCar
+        }
+
+        if normalized.contains("metro") || normalized.contains("subway") || normalized.contains("underground") {
+            return .metro
+        }
+
+        if normalized.contains("tram") || normalized.contains("streetcar") {
+            return .tram
+        }
+
+        if normalized.contains("bus") || normalized.hasPrefix("bus ") {
+            return .bus
+        }
+
+        if normalized.contains("train") ||
+            normalized.contains("rail") ||
+            normalized.range(of: #"\b(rj|r|rx|ex|ic|ec|sc|en|nj|os|sp|le)\s*[0-9]"#, options: .regularExpression) != nil
+        {
+            return .train
+        }
+
+        if normalized.contains("ferry") || normalized.contains("boat") || normalized.contains("ship") {
+            return .ferry
+        }
+
+        if normalized.contains("plane") || normalized.contains("airplane") || normalized.contains("flight") {
+            return .plane
+        }
+
+        if normalized.contains("walk") || normalized.contains("foot") {
+            return .walk
+        }
+
+        return nil
     }
 }
 
@@ -589,6 +681,7 @@ enum IDOSConnectionParser {
             return IDOSConnectionLeg(
                 name: lines[index].name,
                 color: lines[index].color,
+                transportMode: lines[index].transportMode,
                 departureTime: departure.time,
                 fromStation: departure.station,
                 arrivalTime: arrival.time,
@@ -615,7 +708,7 @@ enum IDOSConnectionParser {
         )
     }
 
-    private static func lineDetails(in block: String) -> [(name: String, color: String?)] {
+    private static func lineDetails(in block: String) -> [(name: String, color: String?, transportMode: IDOSTransportMode?)] {
         RegexSupport.matches(
             pattern: #"<h3\b.*?</h3>"#,
             in: block,
@@ -638,9 +731,15 @@ enum IDOSConnectionParser {
                 return nil
             }
 
+            let title = RegexSupport.capture(
+                pattern: #"\btitle="([^"]*)""#,
+                in: heading
+            ).map(HTMLText.decodeEntities) ?? ""
+
             return (
                 name: name,
-                color: HTMLStyle.color(from: heading)
+                color: HTMLStyle.color(from: heading),
+                transportMode: IDOSTransportMode.infer(from: "\(title) \(name)")
             )
         }
     }
