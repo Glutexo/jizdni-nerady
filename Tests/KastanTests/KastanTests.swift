@@ -95,9 +95,27 @@ import Testing
     #expect(output.contains("R9"))
 }
 
+@Test func rootCommandAcceptsHyphenRouteExpression() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["Praha-Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
 @Test func connectionCommandAcceptsTwoPositionalPlaces() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "Praha", "Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
+@Test func rootCommandAcceptsTwoPositionalPlaces() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["Praha", "Brno", "--timetable", "vlaky", "--limit", "1"]
     )
 
     #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
@@ -113,9 +131,27 @@ import Testing
     #expect(output.contains("R9"))
 }
 
+@Test func rootCommandAcceptsAsciiArrowRouteExpression() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["Praha->Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
 @Test func connectionCommandAcceptsUnicodeArrowRouteExpression() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "Praha→Brno", "--timetable", "vlaky", "--limit", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("R9"))
+}
+
+@Test func rootCommandAcceptsUnicodeArrowRouteExpression() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["Praha→Brno", "--timetable", "vlaky", "--limit", "1"]
     )
 
     #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
@@ -272,6 +308,15 @@ import Testing
     #expect(output.contains("🚌"))
     #expect(output.contains("Bus 980"))
     #expect(output.contains("Rožnov p.Radh.,,aut.st."))
+}
+
+@Test func rootCommandWithOnePlacePrintsDepartures() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["Ostrava,Hrabůvka,Benzina", "--timetable", "odis", "--time", "16:00", "--limit", "1"]
+    )
+
+    #expect(output.contains("🚏 Departures Ostrava,Hrabůvka,Benzina (ODIS)"))
+    #expect(output.contains("\u{001B}[1m16:03\u{001B}[0m"))
 }
 
 @Test func departuresCommandPrintsJSON() async throws {
@@ -431,6 +476,25 @@ import Testing
     #expect(output.contains("🧭 Connections Frýdek,Na Veselé → Ostrava,Hrabůvka,Benzina (ODIS)"))
 }
 
+@Test func rootCommandUsesStopAliasesAsTwoPositionalPlaces() async throws {
+    let aliasFile = temporaryAliasFile()
+    var database = StopAliasDatabase()
+    try database.upsert(StopAlias(name: "home", station: "Frýdek,Na Veselé", timetable: try IDOSTimetable.resolve("odis")))
+    try database.upsert(StopAlias(name: "work", station: "Ostrava,Hrabůvka,Benzina", timetable: try IDOSTimetable.resolve("odis")))
+    try aliasFile.save(database)
+
+    let output = await CommandRunner(
+        client: MockIDOSClient(
+            expectedConnectionTimetable: "odis",
+            expectedFrom: "Frýdek,Na Veselé",
+            expectedTo: "Ostrava,Hrabůvka,Benzina"
+        ),
+        aliasFile: aliasFile
+    ).output(for: ["home", "work", "--limit", "1"])
+
+    #expect(output.contains("🧭 Connections Frýdek,Na Veselé → Ostrava,Hrabůvka,Benzina (ODIS)"))
+}
+
 @Test func departuresCommandUsesStopAliasAndInferredTimetable() async throws {
     let aliasFile = temporaryAliasFile()
     var database = StopAliasDatabase()
@@ -443,6 +507,23 @@ import Testing
 
     let output = await CommandRunner(client: MockIDOSClient(), aliasFile: aliasFile).output(
         for: ["departures", "--station", "benzina", "--limit", "1"]
+    )
+
+    #expect(output.contains("🚏 Departures Ostrava,Hrabůvka,Benzina (ODIS)"))
+}
+
+@Test func rootCommandUsesStopAliasAsDepartureStation() async throws {
+    let aliasFile = temporaryAliasFile()
+    var database = StopAliasDatabase()
+    try database.upsert(StopAlias(
+        name: "work",
+        station: "Ostrava,Hrabůvka,Benzina",
+        timetable: try IDOSTimetable.resolve("odis")
+    ))
+    try aliasFile.save(database)
+
+    let output = await CommandRunner(client: MockIDOSClient(), aliasFile: aliasFile).output(
+        for: ["work", "--limit", "1"]
     )
 
     #expect(output.contains("🚏 Departures Ostrava,Hrabůvka,Benzina (ODIS)"))

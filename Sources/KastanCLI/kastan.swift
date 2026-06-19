@@ -55,6 +55,10 @@ struct CommandRunner {
             case "timetables":
                 return try timetablesOutput(for: Array(arguments.dropFirst()))
             default:
+                if let output = try await shorthandOutput(for: arguments) {
+                    return output
+                }
+
                 return "❌ Unknown command: \(command)\n\n\(helpText)"
             }
         } catch {
@@ -92,7 +96,11 @@ struct CommandRunner {
         let format = try options.outputFormat()
         let aliasDatabase = try aliasFile.load()
 
-        let endpoints = try connectionEndpoints(from: options.value(for: "--from", short: "-f"), to: options.value(for: "--to", short: "-t"), positional: options.positional)
+        let endpoints = try connectionEndpoints(
+            from: options.value(for: "--from", short: "-f"),
+            to: options.value(for: "--to", short: "-t"),
+            positional: positionalValues(in: options)
+        )
 
         let fromPlace = resolvePlace(endpoints.from, in: aliasDatabase)
         let toPlace = resolvePlace(endpoints.to, in: aliasDatabase)
@@ -130,8 +138,8 @@ struct CommandRunner {
         let format = try options.outputFormat()
         let aliasDatabase = try aliasFile.load()
 
-        guard let station = options.value(for: "--station", short: "-s"), !station.isEmpty else {
-            throw CommandError.usage("Usage: kastan departures --station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]")
+        guard let station = departureStation(in: options), !station.isEmpty else {
+            throw CommandError.usage(departuresUsage)
         }
 
         let stationPlace = resolvePlace(station, in: aliasDatabase)
@@ -159,6 +167,20 @@ struct CommandRunner {
         try options.rejectUnknownOptions(allowedValueOptions: ["--format"])
         let format = try options.outputFormat()
         return try format.renderTimetables(TimetablesOutput(timetables: IDOSTimetable.known))
+    }
+
+    private func shorthandOutput(for arguments: [String]) async throws -> String? {
+        let options = CommandOptions(arguments)
+
+        if isConnectionShorthand(options) {
+            return try await connectionsOutput(for: arguments)
+        }
+
+        if positionalValues(in: options).count == 1 {
+            return try await departuresOutput(for: arguments)
+        }
+
+        return nil
     }
 
     private func aliasesOutput(for arguments: [String]) throws -> String {
@@ -277,9 +299,7 @@ struct CommandRunner {
             throw CommandError.usage(connectionUsage)
         }
 
-        let positional = positional
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        let positional = positionalValues(positional)
 
         if positional.count == 2 {
             return ConnectionEndpoints(from: positional[0], to: positional[1])
@@ -291,6 +311,46 @@ struct CommandRunner {
         }
 
         return endpoints
+    }
+
+    private func departureStation(in options: CommandOptions) -> String? {
+        if let station = options.value(for: "--station", short: "-s")?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !station.isEmpty
+        {
+            return station
+        }
+
+        let positional = positionalValues(in: options)
+        return positional.count == 1 ? positional[0] : nil
+    }
+
+    private func isConnectionShorthand(_ options: CommandOptions) -> Bool {
+        let from = options.value(for: "--from", short: "-f")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let to = options.value(for: "--to", short: "-t")?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if from?.isEmpty == false || to?.isEmpty == false {
+            return true
+        }
+
+        let positional = positionalValues(in: options)
+        if positional.count == 2 {
+            return true
+        }
+
+        return parseConnectionExpression(positional.joined(separator: " ")) != nil
+    }
+
+    private func positionalValues(in options: CommandOptions) -> [String] {
+        positionalValues(options.positional(valueOptions: [
+            "--from", "-f", "--to", "-t", "--via", "--station", "-s", "--timetable", "--date", "--time",
+            "--max-transfers", "--min-transfer-time", "--format", "--limit",
+        ]))
+    }
+
+    private func positionalValues(_ values: [String]) -> [String] {
+        values
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     private func parseConnectionExpression(_ expression: String) -> ConnectionEndpoints? {
@@ -322,12 +382,18 @@ struct CommandRunner {
         "Usage: kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]"
     }
 
+    private var departuresUsage: String {
+        "Usage: kastan departures station|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]"
+    }
+
     private var helpText: String {
         """
         🌰 Usage:
+          kastan route|from to
+          kastan station
           kastan suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
           kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
-          kastan departures --station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
+          kastan departures station|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
           kastan aliases list|add|remove|path [--format text|markdown|json]
           kastan timetables [--format text|markdown|json]
 
@@ -802,6 +868,10 @@ private struct CommandOptions {
     }
 
     var positional: [String] {
+        positional(valueOptions: Set(arguments.filter { $0.hasPrefix("-") }))
+    }
+
+    func positional(valueOptions: Set<String>) -> [String] {
         var values: [String] = []
         var skipNext = false
 
@@ -812,7 +882,7 @@ private struct CommandOptions {
             }
 
             if argument.hasPrefix("--") || argument.hasPrefix("-") {
-                skipNext = !argument.contains("=")
+                skipNext = valueOptions.contains(argument) && !argument.contains("=")
                 continue
             }
 

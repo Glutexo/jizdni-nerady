@@ -21,6 +21,8 @@ swift run kastan connections Praha-Brno --time 12:00
 swift run kastan connections Praha Brno --time 12:00
 swift run kastan connections "Praha -> Brno"
 swift run kastan connections "Praha → Brno"
+swift run kastan Praha Brno --time 12:00
+swift run kastan Praha→Brno
 ```
 
 Search station departures:
@@ -28,6 +30,7 @@ Search station departures:
 ```sh
 swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --timetable odis --time 16:00
 swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --timetable odis --arrival
+swift run kastan "Ostrava,Hrabůvka,Benzina" --timetable odis --time 16:00
 ```
 
 Line names in connection output use the same terminal color as IDOS sends in the HTML result.
@@ -103,7 +106,9 @@ Aliases can be used anywhere a station or place is accepted:
 swift run kastan connections --from home --to work --time 16:00
 swift run kastan connections home→work --time 16:00
 swift run kastan connections home work --time 16:00
+swift run kastan home work --time 16:00
 swift run kastan departures --station work --time 16:00
+swift run kastan work --time 16:00
 ```
 
 When all used aliases belong to the same timetable, Kaštan uses that timetable automatically.
