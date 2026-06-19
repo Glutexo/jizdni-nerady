@@ -18,6 +18,7 @@ import Testing
     #expect(output.contains("departures"))
     #expect(output.contains("timetables"))
     #expect(output.contains("aliases"))
+    #expect(output.contains("stations"))
     #expect(output.contains("--timetable"))
     #expect(output.contains("--station"))
     #expect(output.contains("--arrival"))
@@ -74,6 +75,32 @@ import Testing
 
 @Test func suggestCommandRejectsUnknownOptions() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(for: ["suggest", "Praha", "--unknown"])
+
+    #expect(output.contains("❌ Error: Unknown option: --unknown."))
+}
+
+@Test func stationsCommandPrintsStations() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["stations", "Praha", "--timetable", "pid"])
+
+    #expect(output.contains("🚏 Stations (Prague + PID):"))
+    #expect(output.contains("Praha hl.n."))
+    #expect(output.contains("station"))
+}
+
+@Test func stationsCommandPrintsJSON() async throws {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["stations", "Praha", "-T", "pid", "-o", "json", "-l", "1"]
+    )
+    let json = try jsonDictionary(output)
+
+    #expect((json["query"] as? String) == "Praha")
+    #expect((json["timetable"] as? [String: Any])?["displayName"] as? String == "Prague + PID")
+    #expect((json["stations"] as? [[String: Any]])?.first?["text"] as? String == "Praha hl.n.")
+    #expect(json["suggestions"] == nil)
+}
+
+@Test func stationsCommandRejectsUnknownOptions() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["stations", "Praha", "--unknown"])
 
     #expect(output.contains("❌ Error: Unknown option: --unknown."))
 }
@@ -990,6 +1017,16 @@ private struct MockIDOSClient: IDOSClienting {
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
         #expect(timetable.slug == "pid")
 
+        return stationSuggestions
+    }
+
+    func searchStations(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
+        #expect(timetable.slug == "pid")
+
+        return stationSuggestions
+    }
+
+    private var stationSuggestions: [IDOSSuggestion] {
         return [
             IDOSSuggestion(
                 selectedText: "Praha hl.n.",

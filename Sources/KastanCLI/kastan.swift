@@ -43,7 +43,7 @@ struct CommandRunner {
             return """
             🌰 Kaštan
 
-            Search occasional IDOS connections or suggested places.
+            Search occasional IDOS connections, stations, or suggested places.
             Run kastan --help for usage.
             """
         }
@@ -52,6 +52,8 @@ struct CommandRunner {
             switch command {
             case "suggest":
                 return try await suggestOutput(for: Array(arguments.dropFirst()))
+            case "stations":
+                return try await stationsOutput(for: Array(arguments.dropFirst()))
             case "connections":
                 return try await connectionsOutput(for: Array(arguments.dropFirst()))
             case "departures":
@@ -96,6 +98,24 @@ struct CommandRunner {
         let suggestions = try await client.suggest(prefix: prefix, limit: limit, timetable: timetable)
         return try format.renderSuggestions(
             SuggestedPlacesOutput(query: prefix, timetable: timetable, suggestions: suggestions)
+        )
+    }
+
+    private func stationsOutput(for arguments: [String]) async throws -> String {
+        let options = CommandOptions(arguments)
+        try options.rejectUnknownOptions(allowedValueOptions: ["--timetable", "-T", "--format", "-o", "--limit", "-l"])
+        let format = try options.outputFormat()
+        let limit = options.integerValue(for: "--limit", short: "-l") ?? 8
+        let timetable = try options.timetable()
+        let prefix = options.positional.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !prefix.isEmpty else {
+            throw CommandError.usage("Usage: kastan stations <name> [-T alias] [-o text|markdown|json] [-l count]")
+        }
+
+        let stations = try await client.searchStations(prefix: prefix, limit: limit, timetable: timetable)
+        return try format.renderStations(
+            StationsOutput(query: prefix, timetable: timetable, stations: stations)
         )
     }
 
@@ -444,6 +464,7 @@ struct CommandRunner {
           kastan route|from to
           kastan station
           kastan suggest <text> [-T alias] [-o text|markdown|json] [-l count]
+          kastan stations <name> [-T alias] [-o text|markdown|json] [-l count]
           kastan connections route|from to|-f place -t place [-V place] [-T alias] [-d d.m.yyyy] [-m h:mm] [-a|-p] [-x] [-X count] [-M minutes] [-c] [-v] [-o text|markdown|json|ics] [-l count]
           kastan departures station|-f place|-s place [-T alias] [-d d.m.yyyy] [-m h:mm] [-a|-p] [-v] [-o text|markdown|json] [-l count]
           kastan aliases list|add|remove|path [-o text|markdown|json]
@@ -584,6 +605,42 @@ private enum OutputFormat: String {
             return try JSON.write(output)
         case .ics:
             throw CommandError.unsupportedOutputFormat(format: "iCal", command: "suggest")
+        }
+    }
+
+    func renderStations(_ output: StationsOutput) throws -> String {
+        switch self {
+        case .text:
+            guard !output.stations.isEmpty else {
+                return "🚏 No stations found."
+            }
+
+            return (["🚏 Stations (\(output.timetable.displayName)):"] + output.stations.enumerated().map { index, station in
+                let detail = suggestionDetails(station).joined(separator: ", ")
+                return "\(index + 1). \(station.text)\(detail.isEmpty ? "" : " - \(detail)")"
+            }).joined(separator: "\n")
+        case .markdown:
+            guard !output.stations.isEmpty else {
+                return "## 🚏 Stations\n\nNo stations found."
+            }
+
+            let rows = output.stations.enumerated().map { index, station in
+                "| \(index + 1) | \(Markdown.escape(station.text)) | \(Markdown.escape(suggestionDetails(station).joined(separator: ", "))) |"
+            }.joined(separator: "\n")
+
+            return """
+            ## 🚏 Stations
+
+            Timetable: **\(Markdown.escape(output.timetable.displayName))**
+
+            | # | Station | Details |
+            | ---: | --- | --- |
+            \(rows)
+            """
+        case .json:
+            return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "stations")
         }
     }
 
@@ -883,6 +940,12 @@ private struct SuggestedPlacesOutput: Codable {
     var query: String
     var timetable: IDOSTimetable
     var suggestions: [IDOSSuggestion]
+}
+
+private struct StationsOutput: Codable {
+    var query: String
+    var timetable: IDOSTimetable
+    var stations: [IDOSSuggestion]
 }
 
 private struct ConnectionsOutput: Codable {

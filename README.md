@@ -12,6 +12,13 @@ swift run kastan suggest Praha
 swift run kastan suggest Svinov --timetable ostrava
 ```
 
+Search stations by name:
+
+```sh
+swift run kastan stations Praha
+swift run kastan stations Svinov -T ostrava -l 5
+```
+
 Search connections:
 
 ```sh
@@ -51,6 +58,7 @@ Network failures, including missing internet connectivity, are printed as normal
 
 ```sh
 swift run kastan suggest Praha --format json
+swift run kastan stations Praha --format json
 swift run kastan connections --from Praha --to Brno --format markdown
 swift run kastan connections --from Praha --to Brno --verbose
 swift run kastan connections --from Praha --to Brno --format ics > connection.ics
@@ -169,6 +177,7 @@ let request = IDOSConnectionRequest(
 )
 let connections = try await client.findConnections(request: request)
 let calendar = try await client.connectionCalendar(for: connections[0], timetable: timetable)
+let stations = try await client.searchStations(prefix: "Svinov", timetable: timetable)
 
 let departuresRequest = IDOSDeparturesRequest(
     timetable: timetable,
@@ -183,7 +192,7 @@ try aliases.upsert(StopAlias(name: "work", station: "Ostrava,Hrabůvka,Benzina",
 try aliasFile.save(aliases)
 ```
 
-The public API includes `IDOSClient`, `IDOSConnectionRequest`, `IDOSDeparturesRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg`, `IDOSDeparture`, `IDOSTransportMode`, `StopAlias`, `StopAliasDatabase`, `StopAliasFile`, `StopAliasError`, and `IDOSError`.
+The public API includes `IDOSClient`, `IDOSClienting`, `IDOSConnectionRequest`, `IDOSDeparturesRequest`, `IDOSTimetable`, `IDOSSuggestion`, `IDOSConnection`, `IDOSConnectionLeg`, `IDOSDeparture`, `IDOSTransportMode`, `StopAlias`, `StopAliasDatabase`, `StopAliasFile`, `StopAliasError`, and `IDOSError`.
 
 ## 🌰 Development
 

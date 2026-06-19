@@ -5,6 +5,7 @@ import FoundationNetworking
 
 public protocol IDOSClienting: Sendable {
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion]
+    func searchStations(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion]
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection]
     func connectionCalendar(for connection: IDOSConnection, timetable: IDOSTimetable) async throws -> String
     func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture]
@@ -18,6 +19,19 @@ public struct IDOSClient: IDOSClienting {
     }
 
     public func suggest(prefix: String, limit: Int = 8, timetable: IDOSTimetable = .defaultTimetable) async throws -> [IDOSSuggestion] {
+        try await searchTimetableObjects(prefix: prefix, limit: limit, timetable: timetable, onlyStation: false)
+    }
+
+    public func searchStations(prefix: String, limit: Int = 8, timetable: IDOSTimetable = .defaultTimetable) async throws -> [IDOSSuggestion] {
+        try await searchTimetableObjects(prefix: prefix, limit: limit, timetable: timetable, onlyStation: true)
+    }
+
+    private func searchTimetableObjects(
+        prefix: String,
+        limit: Int,
+        timetable: IDOSTimetable,
+        onlyStation: Bool
+    ) async throws -> [IDOSSuggestion] {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
         components.path = "/en/\(timetable.slug)/Ajax/SearchTimetableObjects/"
         components.queryItems = [
@@ -25,7 +39,7 @@ public struct IDOSClient: IDOSClienting {
             URLQueryItem(name: "prefixText", value: prefix),
             URLQueryItem(name: "positionAccuracy", value: "0"),
             URLQueryItem(name: "searchByPosition", value: "false"),
-            URLQueryItem(name: "onlyStation", value: "false"),
+            URLQueryItem(name: "onlyStation", value: onlyStation ? "true" : "false"),
             URLQueryItem(name: "format", value: "json"),
             URLQueryItem(name: "bindTtIndex", value: ""),
             URLQueryItem(name: "callback", value: "idosCallback"),
