@@ -310,6 +310,15 @@ import Testing
     #expect(output.contains("Rožnov p.Radh.,,aut.st."))
 }
 
+@Test func departuresCommandAcceptsFromOption() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["departures", "--from", "Ostrava,Hrabůvka,Benzina", "--timetable", "odis", "--time", "16:00", "--limit", "1"]
+    )
+
+    #expect(output.contains("🚏 Departures Ostrava,Hrabůvka,Benzina (ODIS)"))
+    #expect(output.contains("\u{001B}[1m16:03\u{001B}[0m"))
+}
+
 @Test func rootCommandWithOnePlacePrintsDepartures() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["Ostrava,Hrabůvka,Benzina", "--timetable", "odis", "--time", "16:00", "--limit", "1"]

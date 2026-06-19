@@ -133,7 +133,7 @@ struct CommandRunner {
         let options = CommandOptions(arguments)
         try options.rejectUnknownOptions(
             allowedFlags: ["--arrival", "--departure"],
-            allowedValueOptions: ["--station", "-s", "--timetable", "--date", "--time", "--format", "--limit"]
+            allowedValueOptions: ["--station", "-s", "--from", "-f", "--timetable", "--date", "--time", "--format", "--limit"]
         )
         let format = try options.outputFormat()
         let aliasDatabase = try aliasFile.load()
@@ -320,6 +320,12 @@ struct CommandRunner {
             return station
         }
 
+        if let station = options.value(for: "--from", short: "-f")?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !station.isEmpty
+        {
+            return station
+        }
+
         let positional = positionalValues(in: options)
         return positional.count == 1 ? positional[0] : nil
     }
@@ -383,7 +389,7 @@ struct CommandRunner {
     }
 
     private var departuresUsage: String {
-        "Usage: kastan departures station|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]"
+        "Usage: kastan departures station|--from place|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]"
     }
 
     private var helpText: String {
@@ -393,7 +399,7 @@ struct CommandRunner {
           kastan station
           kastan suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
           kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
-          kastan departures station|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
+          kastan departures station|--from place|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
           kastan aliases list|add|remove|path [--format text|markdown|json]
           kastan timetables [--format text|markdown|json]
 

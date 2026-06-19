@@ -28,6 +28,7 @@ swift run kastan Praha→Brno
 Search station departures:
 
 ```sh
+swift run kastan departures --from "Ostrava,Hrabůvka,Benzina" --timetable odis --time 16:00
 swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --timetable odis --time 16:00
 swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --timetable odis --arrival
 swift run kastan "Ostrava,Hrabůvka,Benzina" --timetable odis --time 16:00
@@ -107,6 +108,7 @@ swift run kastan connections --from home --to work --time 16:00
 swift run kastan connections home→work --time 16:00
 swift run kastan connections home work --time 16:00
 swift run kastan home work --time 16:00
+swift run kastan departures --from work --time 16:00
 swift run kastan departures --station work --time 16:00
 swift run kastan work --time 16:00
 ```
