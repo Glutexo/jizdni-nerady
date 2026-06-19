@@ -24,6 +24,7 @@ import Testing
     #expect(output.contains("--departure"))
     #expect(output.contains("--via"))
     #expect(output.contains("--direct"))
+    #expect(output.contains("--add-to-calendar"))
     #expect(output.contains("--max-transfers"))
     #expect(output.contains("--min-transfer-time"))
     #expect(output.contains("--format"))
@@ -207,6 +208,45 @@ import Testing
     #expect(output.contains("BEGIN:VCALENDAR"))
     #expect(output.contains("SUMMARY:Connection Praha hl.n. >> Brno hl.n."))
     #expect(output.contains("END:VCALENDAR"))
+}
+
+@Test func connectionCommandAddsIDOSCalendar() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(),
+        calendarImporter: MockCalendarImporter(path: "/tmp/kastan-test.ics")
+    ).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--add-to-calendar"]
+    )
+
+    #expect(output.contains("📅 Opened calendar import for Praha → Brno"))
+    #expect(output.contains("/tmp/kastan-test.ics"))
+}
+
+@Test func connectionCommandAddsIDOSCalendarAsJSON() async throws {
+    let output = await CommandRunner(
+        client: MockIDOSClient(),
+        calendarImporter: MockCalendarImporter(path: "/tmp/kastan-test.ics")
+    ).output(
+        for: [
+            "connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky",
+            "--add-to-calendar", "--format", "json",
+        ]
+    )
+    let json = try jsonDictionary(output)
+
+    #expect(json["path"] as? String == "/tmp/kastan-test.ics")
+    #expect((json["connection"] as? [String: Any])?["id"] as? String == "396829589")
+}
+
+@Test func connectionCommandRejectsCalendarImportWithICSOutput() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: [
+            "connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky",
+            "--add-to-calendar", "--format", "ics",
+        ]
+    )
+
+    #expect(output.contains("Conflicting options: --add-to-calendar and --format ics"))
 }
 
 @Test func connectionCommandPrintsJSONWithVia() async throws {
@@ -920,6 +960,17 @@ private struct MockIDOSClient: IDOSClienting {
                 delay: "Currently no delay"
             )
         ]
+    }
+}
+
+private struct MockCalendarImporter: CalendarImporting {
+    var path: String
+
+    func add(calendar: String, fileName: String) throws -> URL {
+        #expect(calendar.contains("BEGIN:VCALENDAR"))
+        #expect(fileName == "kastan-396829589.ics")
+
+        return URL(fileURLWithPath: path)
     }
 }
 

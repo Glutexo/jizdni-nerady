@@ -43,6 +43,7 @@ Departure headings use the station name resolved by IDOS, not necessarily the ex
 
 All data and alias commands support `--format text`, `--format markdown`, and `--format json`. The default is `text`.
 The `connections` command also supports `--format ics`, which prints the IDOS iCalendar file for the first returned connection.
+Use `--add-to-calendar` to open that IDOS iCalendar file directly in the system calendar application.
 Unknown command-line options are rejected.
 Network failures, including missing internet connectivity, are printed as normal command errors in the selected format.
 
@@ -50,6 +51,7 @@ Network failures, including missing internet connectivity, are printed as normal
 swift run kastan suggest Praha --format json
 swift run kastan connections --from Praha --to Brno --format markdown
 swift run kastan connections --from Praha --to Brno --format ics > connection.ics
+swift run kastan connections --from Praha --to Brno --add-to-calendar
 swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --format json
 swift run kastan timetables --format json
 swift run kastan aliases list --format json

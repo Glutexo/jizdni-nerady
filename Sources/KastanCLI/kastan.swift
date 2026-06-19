@@ -16,10 +16,16 @@ struct CommandRunner {
     let version = "0.1.0"
     let client: IDOSClienting
     let aliasFile: StopAliasFile
+    let calendarImporter: CalendarImporting
 
-    init(client: IDOSClienting = IDOSClient(), aliasFile: StopAliasFile = StopAliasFile()) {
+    init(
+        client: IDOSClienting = IDOSClient(),
+        aliasFile: StopAliasFile = StopAliasFile(),
+        calendarImporter: CalendarImporting = SystemCalendarImporter()
+    ) {
         self.client = client
         self.aliasFile = aliasFile
+        self.calendarImporter = calendarImporter
     }
 
     func output<S: Sequence<String>>(for arguments: S) async -> String {
@@ -96,13 +102,17 @@ struct CommandRunner {
     private func connectionsOutput(for arguments: [String]) async throws -> String {
         let options = CommandOptions(arguments)
         try options.rejectUnknownOptions(
-            allowedFlags: ["--arrival", "--departure", "--direct", "--only-direct"],
+            allowedFlags: ["--arrival", "--departure", "--direct", "--only-direct", "--add-to-calendar"],
             allowedValueOptions: [
                 "--from", "-f", "--to", "-t", "--via", "--timetable", "--date", "--time",
                 "--max-transfers", "--min-transfer-time", "--format", "--limit",
             ]
         )
         let format = try options.outputFormat()
+        if options.contains("--add-to-calendar") && format == .ics {
+            throw CommandError.conflictingOptions("--add-to-calendar", "--format ics")
+        }
+
         let aliasDatabase = try aliasFile.load()
 
         let endpoints = try connectionEndpoints(
@@ -133,12 +143,22 @@ struct CommandRunner {
         )
         let limit = options.integerValue(for: "--limit") ?? 5
         let connections = try await client.findConnections(request: request)
-        if format == .ics {
+        if format == .ics || options.contains("--add-to-calendar") {
             guard let connection = connections.first else {
                 throw CommandError.usage("IDOS returned no connections.")
             }
 
-            return try await client.connectionCalendar(for: connection, timetable: request.timetable)
+            let calendar = try await client.connectionCalendar(for: connection, timetable: request.timetable)
+            if options.contains("--add-to-calendar") {
+                let output = CalendarImportOutput(
+                    request: request,
+                    connection: connection,
+                    path: try calendarImporter.add(calendar: calendar, fileName: "kastan-\(connection.id).ics").path
+                )
+                return try format.renderCalendarImport(output)
+            }
+
+            return calendar
         }
 
         return try format.renderConnections(
@@ -402,7 +422,7 @@ struct CommandRunner {
     }
 
     private var connectionUsage: String {
-        "Usage: kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json|ics] [--limit count]"
+        "Usage: kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--add-to-calendar] [--format text|markdown|json|ics] [--limit count]"
     }
 
     private var departuresUsage: String {
@@ -415,7 +435,7 @@ struct CommandRunner {
           kastan route|from to
           kastan station
           kastan suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json|ics] [--limit count]
+          kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--add-to-calendar] [--format text|markdown|json|ics] [--limit count]
           kastan departures station|--from place|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
           kastan aliases list|add|remove|path [--format text|markdown|json]
           kastan timetables [--format text|markdown|json]
@@ -428,6 +448,7 @@ struct CommandRunner {
           --station               Station for departures or arrivals
           --via                   Via place, repeat for multiple places
           --direct, --only-direct Direct connections only
+          --add-to-calendar       Open the first returned connection as an iCalendar import
           --max-transfers         Maximum transfers permitted, including 0
           --min-transfer-time     Minimum transfer time in minutes, including 0
           --format                Output format: text, markdown, json, or ics for connections
@@ -444,6 +465,7 @@ private enum CommandError: LocalizedError {
     case conflictingOptions(String, String)
     case aliasTimetableMismatch(alias: String, aliasTimetable: IDOSTimetable, requestedTimetable: IDOSTimetable)
     case conflictingAliasTimetables(IDOSTimetable, IDOSTimetable)
+    case calendarImportUnavailable
     case unknownOption(String)
     case unsupportedOutputFormat(format: String, command: String)
     case usage(String)
@@ -460,6 +482,8 @@ private enum CommandError: LocalizedError {
             return "Stop alias \(alias) belongs to \(aliasTimetable.displayName), but requested timetable is \(requestedTimetable.displayName)."
         case .conflictingAliasTimetables(let first, let second):
             return "Stop aliases use conflicting timetables: \(first.displayName) and \(second.displayName). Use --timetable only when all used aliases belong to it."
+        case .calendarImportUnavailable:
+            return "Calendar import is not available on this system."
         case .unknownOption(let value):
             return "Unknown option: \(value)."
         case .unsupportedOutputFormat(let format, let command):
@@ -606,6 +630,22 @@ private enum OutputFormat: String {
             return try JSON.write(output)
         case .ics:
             throw CommandError.unsupportedOutputFormat(format: "iCal", command: "connections renderer")
+        }
+    }
+
+    func renderCalendarImport(_ output: CalendarImportOutput) throws -> String {
+        switch self {
+        case .text, .ics:
+            return "📅 Opened calendar import for \(routeDescription(output.request)): \(output.path)"
+        case .markdown:
+            return """
+            ## 📅 Calendar Import
+
+            **Connection:** \(Markdown.bold(output.connection.departureTime)) \(Markdown.escape(output.connection.departureStation)) → \(Markdown.bold(output.connection.arrivalTime)) \(Markdown.escape(output.connection.arrivalStation))
+            **File:** `\(Markdown.escape(output.path))`
+            """
+        case .json:
+            return try JSON.write(output)
         }
     }
 
@@ -819,6 +859,12 @@ private struct DeparturesOutput: Codable {
     var departures: [IDOSDeparture]
 }
 
+private struct CalendarImportOutput: Codable {
+    var request: IDOSConnectionRequest
+    var connection: IDOSConnection
+    var path: String
+}
+
 private struct TimetablesOutput: Codable {
     var timetables: [IDOSTimetable]
 }
@@ -850,6 +896,37 @@ private struct ConnectionEndpoints {
 
 private struct ErrorOutput: Codable {
     var error: String
+}
+
+protocol CalendarImporting {
+    func add(calendar: String, fileName: String) throws -> URL
+}
+
+struct SystemCalendarImporter: CalendarImporting {
+    func add(calendar: String, fileName: String) throws -> URL {
+        #if os(macOS)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+            .appendingPathComponent(fileName)
+
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try calendar.write(to: url, atomically: true, encoding: .utf8)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = [url.path]
+        try process.run()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            throw CommandError.calendarImportUnavailable
+        }
+
+        return url
+        #else
+        throw CommandError.calendarImportUnavailable
+        #endif
+    }
 }
 
 private enum JSON {
