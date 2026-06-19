@@ -62,8 +62,17 @@ struct CommandRunner {
                 return "❌ Unknown command: \(command)\n\n\(helpText)"
             }
         } catch {
-            return OutputFormat.preferredErrorFormat(in: arguments).renderError(error.localizedDescription)
+            return OutputFormat.preferredErrorFormat(in: arguments).renderError(Self.errorMessage(for: error))
         }
+    }
+
+    private static func errorMessage(for error: Error) -> String {
+        let localized = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !localized.isEmpty else {
+            return "The operation failed, but no error details were provided."
+        }
+
+        return localized
     }
 
     private func suggestOutput(for arguments: [String]) async throws -> String {

@@ -42,6 +42,7 @@ Connection and departure times are bold in text and markdown output.
 
 All data and alias commands support `--format text`, `--format markdown`, and `--format json`. The default is `text`.
 Unknown command-line options are rejected.
+Network failures, including missing internet connectivity, are printed as normal command errors in the selected format.
 
 ```sh
 swift run kastan suggest Praha --format json

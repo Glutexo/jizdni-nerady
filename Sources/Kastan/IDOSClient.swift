@@ -87,7 +87,7 @@ public struct IDOSClient: IDOSClienting {
         return try await withCheckedThrowingContinuation { continuation in
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error {
-                    continuation.resume(throwing: error)
+                    continuation.resume(throwing: IDOSError.networkUnavailable(error.localizedDescription))
                     return
                 }
 
@@ -782,6 +782,7 @@ public enum IDOSError: LocalizedError, Sendable {
     case invalidURL
     case invalidJSONP
     case invalidTimetable(String)
+    case networkUnavailable(String)
 
     public var errorDescription: String? {
         switch self {
@@ -793,6 +794,13 @@ public enum IDOSError: LocalizedError, Sendable {
             return "IDOS suggestions returned an unexpected JSONP format."
         case .invalidTimetable(let value):
             return "Invalid timetable: \(value). Use an alias or a URL slug without slashes."
+        case .networkUnavailable(let detail):
+            let detail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !detail.isEmpty else {
+                return "Network request failed. Check your internet connection."
+            }
+
+            return "Network request failed. Check your internet connection. \(detail)"
         }
     }
 }

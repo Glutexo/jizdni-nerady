@@ -264,6 +264,14 @@ import Testing
     #expect(json["error"] as? String == "Unknown option: --unknown.")
 }
 
+@Test func connectionCommandPrintsNetworkErrors() async {
+    let output = await CommandRunner(client: MockIDOSClient(failConnectionsWithNetworkError: true)).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky"]
+    )
+
+    #expect(output.contains("❌ Error: Network request failed. Check your internet connection."))
+}
+
 @Test func connectionCommandLimitsMaximumTransfers() async {
     let output = await CommandRunner(client: MockIDOSClient(expectedMaxTransfers: 0)).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--max-transfers", "0", "--limit", "1"]
@@ -765,6 +773,7 @@ private struct MockIDOSClient: IDOSClienting {
     var expectedVia: [String] = []
     var expectedMaxTransfers: Int? = nil
     var expectedMinimumTransferTime: Int? = nil
+    var failConnectionsWithNetworkError = false
     var expectedDepartureTimetable = "odis"
     var expectedStation = "Ostrava,Hrabůvka,Benzina"
     var expectedDepartureIsArrival = false
@@ -796,6 +805,10 @@ private struct MockIDOSClient: IDOSClienting {
         #expect(request.via == expectedVia)
         #expect(request.maxTransfers == expectedMaxTransfers)
         #expect(request.minimumTransferTime == expectedMinimumTransferTime)
+
+        if failConnectionsWithNetworkError {
+            throw IDOSError.networkUnavailable("")
+        }
 
         return [
             IDOSConnection(
