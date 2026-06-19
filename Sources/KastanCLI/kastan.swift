@@ -83,9 +83,9 @@ struct CommandRunner {
 
     private func suggestOutput(for arguments: [String]) async throws -> String {
         let options = CommandOptions(arguments)
-        try options.rejectUnknownOptions(allowedValueOptions: ["--timetable", "--format", "--limit"])
+        try options.rejectUnknownOptions(allowedValueOptions: ["--timetable", "-T", "--format", "-o", "--limit", "-l"])
         let format = try options.outputFormat()
-        let limit = options.integerValue(for: "--limit") ?? 8
+        let limit = options.integerValue(for: "--limit", short: "-l") ?? 8
         let timetable = try options.timetable()
         let prefix = options.positional.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -102,14 +102,14 @@ struct CommandRunner {
     private func connectionsOutput(for arguments: [String]) async throws -> String {
         let options = CommandOptions(arguments)
         try options.rejectUnknownOptions(
-            allowedFlags: ["--arrival", "--departure", "--direct", "--only-direct", "--add-to-calendar", "--verbose"],
+            allowedFlags: ["--arrival", "-a", "--departure", "-p", "--direct", "--only-direct", "-x", "--add-to-calendar", "-c", "--verbose", "-v"],
             allowedValueOptions: [
-                "--from", "-f", "--to", "-t", "--via", "--timetable", "--date", "--time",
-                "--max-transfers", "--min-transfer-time", "--format", "--limit",
+                "--from", "-f", "--to", "-t", "--via", "-V", "--timetable", "-T", "--date", "-d", "--time", "-m",
+                "--max-transfers", "-X", "--min-transfer-time", "-M", "--format", "-o", "--limit", "-l",
             ]
         )
         let format = try options.outputFormat()
-        if options.contains("--add-to-calendar") && format == .ics {
+        if options.contains("--add-to-calendar", short: "-c") && format == .ics {
             throw CommandError.conflictingOptions("--add-to-calendar", "--format ics")
         }
 
@@ -123,9 +123,9 @@ struct CommandRunner {
 
         let fromPlace = resolvePlace(endpoints.from, in: aliasDatabase)
         let toPlace = resolvePlace(endpoints.to, in: aliasDatabase)
-        let viaPlaces = options.values(for: "--via").map { resolvePlace($0, in: aliasDatabase) }
+        let viaPlaces = options.values(for: "--via", short: "-V").map { resolvePlace($0, in: aliasDatabase) }
         let timetable = try resolveTimetable(
-            explicitValue: options.value(for: "--timetable"),
+            explicitValue: options.value(for: "--timetable", short: "-T"),
             aliases: ([fromPlace, toPlace] + viaPlaces).compactMap(\.alias)
         )
 
@@ -133,23 +133,23 @@ struct CommandRunner {
             timetable: timetable,
             from: fromPlace.station,
             to: toPlace.station,
-            date: options.value(for: "--date"),
-            time: options.value(for: "--time"),
+            date: options.value(for: "--date", short: "-d"),
+            time: options.value(for: "--time", short: "-m"),
             isArrival: try options.isArrivalTimeMode(),
-            onlyDirect: options.contains("--direct") || options.contains("--only-direct"),
+            onlyDirect: options.contains("--direct", short: "-x") || options.contains("--only-direct"),
             via: viaPlaces.map(\.station),
-            maxTransfers: try options.nonNegativeIntegerValue(for: "--max-transfers"),
-            minimumTransferTime: try options.nonNegativeIntegerValue(for: "--min-transfer-time")
+            maxTransfers: try options.nonNegativeIntegerValue(for: "--max-transfers", short: "-X"),
+            minimumTransferTime: try options.nonNegativeIntegerValue(for: "--min-transfer-time", short: "-M")
         )
-        let limit = options.integerValue(for: "--limit") ?? 5
+        let limit = options.integerValue(for: "--limit", short: "-l") ?? 5
         let connections = try await client.findConnections(request: request)
-        if format == .ics || options.contains("--add-to-calendar") {
+        if format == .ics || options.contains("--add-to-calendar", short: "-c") {
             guard let connection = connections.first else {
                 throw CommandError.usage("IDOS returned no connections.")
             }
 
             let calendar = try await client.connectionCalendar(for: connection, timetable: request.timetable)
-            if options.contains("--add-to-calendar") {
+            if options.contains("--add-to-calendar", short: "-c") {
                 let output = CalendarImportOutput(
                     request: request,
                     connection: connection,
@@ -165,7 +165,7 @@ struct CommandRunner {
             ConnectionsOutput(
                 request: request,
                 connections: Array(connections.prefix(max(1, limit))),
-                verbose: options.contains("--verbose")
+                verbose: options.contains("--verbose", short: "-v")
             )
         )
     }
@@ -173,8 +173,8 @@ struct CommandRunner {
     private func departuresOutput(for arguments: [String]) async throws -> String {
         let options = CommandOptions(arguments)
         try options.rejectUnknownOptions(
-            allowedFlags: ["--arrival", "--departure", "--verbose"],
-            allowedValueOptions: ["--station", "-s", "--from", "-f", "--timetable", "--date", "--time", "--format", "--limit"]
+            allowedFlags: ["--arrival", "-a", "--departure", "-p", "--verbose", "-v"],
+            allowedValueOptions: ["--station", "-s", "--from", "-f", "--timetable", "-T", "--date", "-d", "--time", "-m", "--format", "-o", "--limit", "-l"]
         )
         let format = try options.outputFormat()
         let aliasDatabase = try aliasFile.load()
@@ -185,31 +185,31 @@ struct CommandRunner {
 
         let stationPlace = resolvePlace(station, in: aliasDatabase)
         let timetable = try resolveTimetable(
-            explicitValue: options.value(for: "--timetable"),
+            explicitValue: options.value(for: "--timetable", short: "-T"),
             aliases: [stationPlace.alias].compactMap(\.self)
         )
 
         let request = IDOSDeparturesRequest(
             timetable: timetable,
             station: stationPlace.station,
-            date: options.value(for: "--date"),
-            time: options.value(for: "--time"),
+            date: options.value(for: "--date", short: "-d"),
+            time: options.value(for: "--time", short: "-m"),
             isArrival: try options.isArrivalTimeMode()
         )
-        let limit = options.integerValue(for: "--limit") ?? 10
+        let limit = options.integerValue(for: "--limit", short: "-l") ?? 10
         let departures = try await client.findDepartures(request: request)
         return try format.renderDepartures(
             DeparturesOutput(
                 request: request,
                 departures: Array(departures.prefix(max(1, limit))),
-                verbose: options.contains("--verbose")
+                verbose: options.contains("--verbose", short: "-v")
             )
         )
     }
 
     private func timetablesOutput(for arguments: [String]) throws -> String {
         let options = CommandOptions(arguments)
-        try options.rejectUnknownOptions(allowedValueOptions: ["--format"])
+        try options.rejectUnknownOptions(allowedValueOptions: ["--format", "-o"])
         let format = try options.outputFormat()
         return try format.renderTimetables(TimetablesOutput(timetables: IDOSTimetable.known))
     }
@@ -238,7 +238,7 @@ struct CommandRunner {
 
         switch action {
         case "list":
-            try options.rejectUnknownOptions(allowedValueOptions: ["--format"])
+            try options.rejectUnknownOptions(allowedValueOptions: ["--format", "-o"])
             let format = try options.outputFormat()
             return try format.renderStopAliases(StopAliasesOutput(
                 aliases: aliasFile.load().aliases,
@@ -246,12 +246,12 @@ struct CommandRunner {
             ))
 
         case "add":
-            try options.rejectUnknownOptions(allowedValueOptions: ["--station", "-s", "--timetable", "--format"])
+            try options.rejectUnknownOptions(allowedValueOptions: ["--station", "-s", "--timetable", "-T", "--format", "-o"])
             let format = try options.outputFormat()
 
             guard let name = options.positional.first, !name.isEmpty,
                   let station = options.value(for: "--station", short: "-s"), !station.isEmpty,
-                  let timetableValue = options.value(for: "--timetable"), !timetableValue.isEmpty
+                  let timetableValue = options.value(for: "--timetable", short: "-T"), !timetableValue.isEmpty
             else {
                 throw CommandError.usage("Usage: kastan aliases add name --station place --timetable alias [--format text|markdown|json]")
             }
@@ -270,7 +270,7 @@ struct CommandRunner {
             ))
 
         case "remove":
-            try options.rejectUnknownOptions(allowedValueOptions: ["--format"])
+            try options.rejectUnknownOptions(allowedValueOptions: ["--format", "-o"])
             let format = try options.outputFormat()
 
             guard let name = options.positional.first, !name.isEmpty else {
@@ -288,7 +288,7 @@ struct CommandRunner {
             ))
 
         case "path":
-            try options.rejectUnknownOptions(allowedValueOptions: ["--format"])
+            try options.rejectUnknownOptions(allowedValueOptions: ["--format", "-o"])
             let format = try options.outputFormat()
             return try format.renderStopAliasPath(StopAliasPathOutput(path: aliasFile.fileURL.path))
 
@@ -393,8 +393,9 @@ struct CommandRunner {
 
     private func positionalValues(in options: CommandOptions) -> [String] {
         positionalValues(options.positional(valueOptions: [
-            "--from", "-f", "--to", "-t", "--via", "--station", "-s", "--timetable", "--date", "--time",
-            "--max-transfers", "--min-transfer-time", "--format", "--limit",
+            "--from", "-f", "--to", "-t", "--via", "-V", "--station", "-s", "--timetable", "-T",
+            "--date", "-d", "--time", "-m", "--max-transfers", "-X", "--min-transfer-time", "-M",
+            "--format", "-o", "--limit", "-l",
         ]))
     }
 
@@ -430,11 +431,11 @@ struct CommandRunner {
     }
 
     private var connectionUsage: String {
-        "Usage: kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--add-to-calendar] [--verbose] [--format text|markdown|json|ics] [--limit count]"
+        "Usage: kastan connections route|from to|-f place -t place [-V place] [-T alias] [-d d.m.yyyy] [-m h:mm] [-a|-p] [-x] [-X count] [-M minutes] [-c] [-v] [-o text|markdown|json|ics] [-l count]"
     }
 
     private var departuresUsage: String {
-        "Usage: kastan departures station|--from place|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--verbose] [--format text|markdown|json] [--limit count]"
+        "Usage: kastan departures station|-f place|-s place [-T alias] [-d d.m.yyyy] [-m h:mm] [-a|-p] [-v] [-o text|markdown|json] [-l count]"
     }
 
     private var helpText: String {
@@ -442,25 +443,31 @@ struct CommandRunner {
         🌰 Usage:
           kastan route|from to
           kastan station
-          kastan suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--add-to-calendar] [--verbose] [--format text|markdown|json|ics] [--limit count]
-          kastan departures station|--from place|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--verbose] [--format text|markdown|json] [--limit count]
-          kastan aliases list|add|remove|path [--format text|markdown|json]
-          kastan timetables [--format text|markdown|json]
+          kastan suggest <text> [-T alias] [-o text|markdown|json] [-l count]
+          kastan connections route|from to|-f place -t place [-V place] [-T alias] [-d d.m.yyyy] [-m h:mm] [-a|-p] [-x] [-X count] [-M minutes] [-c] [-v] [-o text|markdown|json|ics] [-l count]
+          kastan departures station|-f place|-s place [-T alias] [-d d.m.yyyy] [-m h:mm] [-a|-p] [-v] [-o text|markdown|json] [-l count]
+          kastan aliases list|add|remove|path [-o text|markdown|json]
+          kastan timetables [-o text|markdown|json]
 
         ⚙️ Options:
           -h, --help              Show help
           --version               Show the app version
-          --arrival               Search by arrival time instead of departure time
-          --departure             Search by departure time
-          --station               Station for departures or arrivals
-          --via                   Via place, repeat for multiple places
-          --direct, --only-direct Direct connections only
-          --add-to-calendar       Open the first returned connection as an iCalendar import
-          --verbose               Show tariff zones, platforms, carriers, and delay details
-          --max-transfers         Maximum transfers permitted, including 0
-          --min-transfer-time     Minimum transfer time in minutes, including 0
-          --format                Output format: text, markdown, json, or ics for connections
+          -f, --from              Departure place or station
+          -t, --to                Arrival place
+          -s, --station           Station for departures or arrivals
+          -T, --timetable         Timetable alias or IDOS URL slug
+          -d, --date              Search date
+          -m, --time              Search time
+          -a, --arrival           Search by arrival time instead of departure time
+          -p, --departure         Search by departure time
+          -V, --via               Via place, repeat for multiple places
+          -x, --direct            Direct connections only
+          -c, --add-to-calendar   Open the first returned connection as an iCalendar import
+          -v, --verbose           Show tariff zones, platforms, carriers, and delay details
+          -X, --max-transfers     Maximum transfers permitted, including 0
+          -M, --min-transfer-time Minimum transfer time in minutes, including 0
+          -o, --format            Output format: text, markdown, json, or ics for connections
+          -l, --limit             Maximum number of printed results
 
         Default timetable is vlakyautobusymhdvse.
         Stop aliases are stored in ~/.config/kastan/aliases.json unless KASTAN_ALIAS_DATABASE is set.
@@ -1073,42 +1080,49 @@ private struct CommandOptions {
         return nil
     }
 
-    func values(for name: String) -> [String] {
+    func values(for name: String, short shortName: String? = nil) -> [String] {
         var values: [String] = []
+        let names = [name, shortName].compactMap(\.self)
 
         for index in arguments.indices {
             let argument = arguments[index]
 
-            if argument == name, arguments.indices.contains(index + 1) {
-                values.append(arguments[index + 1])
-            }
+            for name in names {
+                if argument == name, arguments.indices.contains(index + 1) {
+                    values.append(arguments[index + 1])
+                }
 
-            if argument.hasPrefix("\(name)=") {
-                values.append(String(argument.dropFirst(name.count + 1)))
+                if argument.hasPrefix("\(name)=") {
+                    values.append(String(argument.dropFirst(name.count + 1)))
+                }
             }
         }
 
         return values.filter { !$0.isEmpty }
     }
 
-    func integerValue(for name: String) -> Int? {
-        value(for: name).flatMap(Int.init)
+    func integerValue(for name: String, short shortName: String? = nil) -> Int? {
+        value(for: name, short: shortName).flatMap(Int.init)
     }
 
-    func nonNegativeIntegerValue(for name: String) throws -> Int? {
-        guard let value = value(for: name) else {
+    func nonNegativeIntegerValue(for name: String, short shortName: String? = nil) throws -> Int? {
+        guard let match = optionValue(for: name, short: shortName) else {
             return nil
         }
 
+        let (option, value) = match
         guard let integer = Int(value), integer >= 0 else {
-            throw CommandError.invalidNonNegativeInteger(name: name, value: value)
+            throw CommandError.invalidNonNegativeInteger(name: option, value: value)
         }
 
         return integer
     }
 
-    func contains(_ name: String) -> Bool {
-        arguments.contains(name)
+    func contains(_ name: String, short shortName: String? = nil) -> Bool {
+        let names = [name, shortName].compactMap(\.self)
+        return arguments.contains { argument in
+            names.contains(argument)
+        }
     }
 
     func rejectUnknownOptions(allowedFlags: Set<String> = [], allowedValueOptions: Set<String>) throws {
@@ -1148,8 +1162,8 @@ private struct CommandOptions {
     }
 
     func isArrivalTimeMode() throws -> Bool {
-        let arrival = contains("--arrival")
-        let departure = contains("--departure")
+        let arrival = contains("--arrival", short: "-a")
+        let departure = contains("--departure", short: "-p")
 
         guard !(arrival && departure) else {
             throw CommandError.conflictingOptions("--arrival", "--departure")
@@ -1159,10 +1173,29 @@ private struct CommandOptions {
     }
 
     func outputFormat() throws -> OutputFormat {
-        try OutputFormat.resolve(value(for: "--format"))
+        try OutputFormat.resolve(value(for: "--format", short: "-o"))
     }
 
     func timetable() throws -> IDOSTimetable {
-        try IDOSTimetable.resolve(value(for: "--timetable"))
+        try IDOSTimetable.resolve(value(for: "--timetable", short: "-T"))
+    }
+
+    private func optionValue(for longName: String, short shortName: String? = nil) -> (name: String, value: String)? {
+        for index in arguments.indices {
+            let argument = arguments[index]
+            let names = [longName, shortName].compactMap(\.self)
+
+            for name in names {
+                if argument == name, arguments.indices.contains(index + 1) {
+                    return (name, arguments[index + 1])
+                }
+
+                if argument.hasPrefix("\(name)=") {
+                    return (name, String(argument.dropFirst(name.count + 1)))
+                }
+            }
+        }
+
+        return nil
     }
 }

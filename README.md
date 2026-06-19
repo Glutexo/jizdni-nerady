@@ -17,6 +17,7 @@ Search connections:
 ```sh
 swift run kastan connections --from Praha --to Brno --date 18.6.2026 --time 12:00
 swift run kastan connections --from "Frýdek-Místek" --to Ostrava --timetable odis
+swift run kastan connections -f Praha -t Brno -T vlaky -m 12:00 -v
 swift run kastan connections Praha-Brno --time 12:00
 swift run kastan connections Praha Brno --time 12:00
 swift run kastan connections "Praha -> Brno"
@@ -58,6 +59,8 @@ swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --format json
 swift run kastan timetables --format json
 swift run kastan aliases list --format json
 ```
+
+Common options also have short switches: `-f` (`--from`), `-t` (`--to`), `-s` (`--station`), `-T` (`--timetable`), `-d` (`--date`), `-m` (`--time`), `-a` (`--arrival`), `-p` (`--departure`), `-V` (`--via`), `-x` (`--direct`), `-c` (`--add-to-calendar`), `-v` (`--verbose`), `-X` (`--max-transfers`), `-M` (`--min-transfer-time`), `-o` (`--format`), and `-l` (`--limit`).
 
 Limit the number of printed results:
 

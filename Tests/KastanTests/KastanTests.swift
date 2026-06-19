@@ -29,6 +29,9 @@ import Testing
     #expect(output.contains("--max-transfers"))
     #expect(output.contains("--min-transfer-time"))
     #expect(output.contains("--format"))
+    #expect(output.contains("-T, --timetable"))
+    #expect(output.contains("-o, --format"))
+    #expect(output.contains("-v, --verbose"))
     #expect(output.contains("Direct connections only"))
     #expect(!output.contains("--jr"))
     #expect(output.contains("--version"))
@@ -57,6 +60,16 @@ import Testing
     #expect((json["query"] as? String) == "Praha")
     #expect((json["timetable"] as? [String: Any])?["displayName"] as? String == "Prague + PID")
     #expect((json["suggestions"] as? [[String: Any]])?.first?["text"] as? String == "Praha hl.n.")
+}
+
+@Test func suggestCommandAcceptsShortOptions() async throws {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["suggest", "Praha", "-T", "pid", "-o", "json", "-l", "1"]
+    )
+    let json = try jsonDictionary(output)
+
+    #expect((json["query"] as? String) == "Praha")
+    #expect((json["timetable"] as? [String: Any])?["displayName"] as? String == "Prague + PID")
 }
 
 @Test func suggestCommandRejectsUnknownOptions() async {
@@ -98,6 +111,26 @@ import Testing
 
     #expect(output.contains("🧭 Connections Praha → Brno via Pardubice, Olomouc (Trains)"))
     #expect(output.contains("R9"))
+}
+
+@Test func connectionCommandAcceptsShortOptions() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(
+            expectedIsArrival: true,
+            expectedOnlyDirect: true,
+            expectedVia: ["Pardubice"],
+            expectedMaxTransfers: 0,
+            expectedMinimumTransferTime: 10
+        )
+    ).output(
+        for: [
+            "connections", "-f", "Praha", "-t", "Brno", "-T", "vlaky", "-d", "18.6.2026",
+            "-m", "15:00", "-a", "-x", "-V", "Pardubice", "-X", "0", "-M", "10", "-v", "-l", "1",
+        ]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno via Pardubice (Trains)"))
+    #expect(output.contains("tariff zone P · platform 4"))
 }
 
 @Test func connectionCommandAcceptsHyphenRouteExpression() async {
@@ -375,6 +408,14 @@ import Testing
     #expect(output.contains("❌ Error: Invalid --max-transfers: -1. Use a non-negative integer."))
 }
 
+@Test func connectionCommandRejectsNegativeShortMaximumTransfers() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "-f", "Praha", "-t", "Brno", "-T", "vlaky", "-X", "-1"]
+    )
+
+    #expect(output.contains("❌ Error: Invalid -X: -1. Use a non-negative integer."))
+}
+
 @Test func connectionCommandRejectsNegativeMinimumTransferTime() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--min-transfer-time", "-1"]
@@ -409,6 +450,15 @@ import Testing
     #expect(output.contains("tariff zone 70 · platform 1"))
     #expect(output.contains("Transdev Slezsko a.s."))
     #expect(output.contains("Currently no delay"))
+}
+
+@Test func departuresCommandAcceptsShortOptions() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["departures", "-s", "Ostrava,Hrabůvka,Benzina", "-T", "odis", "-m", "16:00", "-v", "-l", "1"]
+    )
+
+    #expect(output.contains("🚏 Departures Ostrava,Hrabůvka,Benzina (ODIS)"))
+    #expect(output.contains("tariff zone 70 · platform 1"))
 }
 
 @Test func departuresCommandPrintsResolvedStationName() async {
@@ -508,7 +558,7 @@ import Testing
 }
 
 @Test func timetablesCommandPrintsJSON() async throws {
-    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables", "--format=json"])
+    let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables", "-o=json"])
     let json = try jsonDictionary(output)
     let timetables = json["timetables"] as? [[String: Any]]
 
@@ -527,7 +577,7 @@ import Testing
     let runner = CommandRunner(client: MockIDOSClient(), aliasFile: aliasFile)
 
     let addOutput = await runner.output(for: [
-        "aliases", "add", "home", "--station", "Frýdek,Na Veselé", "--timetable", "odis",
+        "aliases", "add", "home", "-s", "Frýdek,Na Veselé", "-T", "odis",
     ])
     #expect(addOutput.contains("🌰 Alias added: home → Frýdek,Na Veselé (ODIS)"))
 
@@ -535,7 +585,7 @@ import Testing
     #expect(listOutput.contains("🌰 Stop aliases:"))
     #expect(listOutput.contains("home → Frýdek,Na Veselé (ODIS)"))
 
-    let jsonOutput = await runner.output(for: ["aliases", "list", "--format", "json"])
+    let jsonOutput = await runner.output(for: ["aliases", "list", "-o", "json"])
     let json = try jsonDictionary(jsonOutput)
     let aliases = try #require(json["aliases"] as? [[String: Any]])
     #expect(aliases.first?["name"] as? String == "home")
