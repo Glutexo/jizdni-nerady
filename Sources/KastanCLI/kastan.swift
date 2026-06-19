@@ -133,6 +133,14 @@ struct CommandRunner {
         )
         let limit = options.integerValue(for: "--limit") ?? 5
         let connections = try await client.findConnections(request: request)
+        if format == .ics {
+            guard let connection = connections.first else {
+                throw CommandError.usage("IDOS returned no connections.")
+            }
+
+            return try await client.connectionCalendar(for: connection, timetable: request.timetable)
+        }
+
         return try format.renderConnections(
             ConnectionsOutput(request: request, connections: Array(connections.prefix(max(1, limit))))
         )
@@ -394,7 +402,7 @@ struct CommandRunner {
     }
 
     private var connectionUsage: String {
-        "Usage: kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]"
+        "Usage: kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json|ics] [--limit count]"
     }
 
     private var departuresUsage: String {
@@ -407,7 +415,7 @@ struct CommandRunner {
           kastan route|from to
           kastan station
           kastan suggest <text> [--timetable alias] [--format text|markdown|json] [--limit count]
-          kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json] [--limit count]
+          kastan connections route|from to|--from place --to place [--via place] [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--direct] [--max-transfers count] [--min-transfer-time minutes] [--format text|markdown|json|ics] [--limit count]
           kastan departures station|--from place|--station place [--timetable alias] [--date d.m.yyyy] [--time h:mm] [--arrival|--departure] [--format text|markdown|json] [--limit count]
           kastan aliases list|add|remove|path [--format text|markdown|json]
           kastan timetables [--format text|markdown|json]
@@ -422,7 +430,7 @@ struct CommandRunner {
           --direct, --only-direct Direct connections only
           --max-transfers         Maximum transfers permitted, including 0
           --min-transfer-time     Minimum transfer time in minutes, including 0
-          --format                Output format: text, markdown, or json
+          --format                Output format: text, markdown, json, or ics for connections
 
         Default timetable is vlakyautobusymhdvse.
         Stop aliases are stored in ~/.config/kastan/aliases.json unless KASTAN_ALIAS_DATABASE is set.
@@ -437,12 +445,13 @@ private enum CommandError: LocalizedError {
     case aliasTimetableMismatch(alias: String, aliasTimetable: IDOSTimetable, requestedTimetable: IDOSTimetable)
     case conflictingAliasTimetables(IDOSTimetable, IDOSTimetable)
     case unknownOption(String)
+    case unsupportedOutputFormat(format: String, command: String)
     case usage(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidOutputFormat(let value):
-            return "Invalid output format: \(value). Use text, markdown, or json."
+            return "Invalid output format: \(value). Use text, markdown, json, or ics."
         case .invalidNonNegativeInteger(let name, let value):
             return "Invalid \(name): \(value). Use a non-negative integer."
         case .conflictingOptions(let first, let second):
@@ -453,6 +462,8 @@ private enum CommandError: LocalizedError {
             return "Stop aliases use conflicting timetables: \(first.displayName) and \(second.displayName). Use --timetable only when all used aliases belong to it."
         case .unknownOption(let value):
             return "Unknown option: \(value)."
+        case .unsupportedOutputFormat(let format, let command):
+            return "\(format) output is not available for \(command)."
         case .usage(let message):
             return message
         }
@@ -463,6 +474,7 @@ private enum OutputFormat: String {
     case text
     case markdown
     case json
+    case ics
 
     static func resolve(_ value: String?) throws -> OutputFormat {
         guard let value, !value.isEmpty else {
@@ -476,6 +488,8 @@ private enum OutputFormat: String {
             return .markdown
         case "json":
             return .json
+        case "ics", "ical", "calendar":
+            return .ics
         default:
             throw CommandError.invalidOutputFormat(value)
         }
@@ -488,7 +502,7 @@ private enum OutputFormat: String {
 
     func renderError(_ message: String) -> String {
         switch self {
-        case .text:
+        case .text, .ics:
             return "❌ Error: \(message)"
         case .markdown:
             return "> ❌ Error: \(Markdown.escape(message))"
@@ -528,6 +542,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "suggest")
         }
     }
 
@@ -588,6 +604,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "connections renderer")
         }
     }
 
@@ -637,6 +655,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: title.lowercased())
         }
     }
 
@@ -669,6 +689,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "timetables")
         }
     }
 
@@ -715,6 +737,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "aliases")
         }
     }
 
@@ -733,6 +757,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "aliases")
         }
     }
 
@@ -748,6 +774,8 @@ private enum OutputFormat: String {
             """
         case .json:
             return try JSON.write(output)
+        case .ics:
+            throw CommandError.unsupportedOutputFormat(format: "iCal", command: "aliases")
         }
     }
 

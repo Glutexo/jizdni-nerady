@@ -199,6 +199,16 @@ import Testing
     #expect((json["connections"] as? [[String: Any]])?.first?["id"] as? String == "396829589")
 }
 
+@Test func connectionCommandPrintsIDOSCalendar() async {
+    let output = await CommandRunner(client: MockIDOSClient()).output(
+        for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--format", "ics"]
+    )
+
+    #expect(output.contains("BEGIN:VCALENDAR"))
+    #expect(output.contains("SUMMARY:Connection Praha hl.n. >> Brno hl.n."))
+    #expect(output.contains("END:VCALENDAR"))
+}
+
 @Test func connectionCommandPrintsJSONWithVia() async throws {
     let output = await CommandRunner(client: MockIDOSClient(expectedVia: ["Pardubice"])).output(
         for: [
@@ -700,6 +710,32 @@ import Testing
     #expect(connections.first?.summaryLine(number: 1).contains("\u{001B}[38;2;255;0;0mR9") == true)
 }
 
+@Test func connectionParserBuildsCalendarModelFromResultHtml() throws {
+    let html = """
+    <div id="connectionBox-396829589" class="box connection" data-share-url="https://idos.cz/en/vlaky/spojeni/prehled/?p=abc">
+      <p class="reset total">Overall time <strong>3 h 40 min</strong></p>
+      <h3 title="fast train"><span>R9 (R 981 Vysocina)</span></h3>
+      <p class="reset time" title="">12:04</p><p class="station"><strong class="name ">Praha hl.n.</strong></p>
+      <p class="reset time" title="">15:44</p><p class="station"><strong class="name ">Brno hl.n.</strong></p>
+    </div>
+    <script>
+    var connResult = new Conn.ConnResult(params, null, {"handle":123,"connData":[{"connId":396829589,"trains":[]}],"searchItem":{"sCombName":"Trains"}});
+    </script>
+    """
+
+    let connection = try #require(IDOSConnectionParser.parse(html: html).first)
+    let model = try #require(connection.calendarModel)
+    let data = try #require(model.data(using: .utf8))
+    let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let jsConnData = try #require(json["jsConnData"] as? [String: Any])
+    let connData = try #require(jsConnData["connData"] as? [[String: Any]])
+
+    #expect(jsConnData["handle"] as? Int == 123)
+    #expect(jsConnData["permanentUrl"] as? String == "https://idos.cz/en/vlaky/spojeni/prehled/?p=abc")
+    #expect(connData.first?["connId"] as? Int == 396829589)
+    #expect(connData.first?["priceOffer"] is NSNull)
+}
+
 @Test func connectionParserKeepsHtmlOutsideLineNames() {
     let html = """
     <div id="connectionBox-1122672429" class="box connection">
@@ -846,9 +882,22 @@ private struct MockIDOSClient: IDOSClienting {
                         toStation: "Brno hl.n."
                     )
                 ],
-                shareURL: "https://idos.cz/detail"
+                shareURL: "https://idos.cz/detail",
+                calendarModel: #"{"jsConnData":{"connData":[],"searchItem":{},"permanentUrl":"https://idos.cz/detail"}}"#
             )
         ]
+    }
+
+    func connectionCalendar(for connection: IDOSConnection, timetable: IDOSTimetable) async throws -> String {
+        #expect(timetable.slug == expectedConnectionTimetable)
+        #expect(connection.id == "396829589")
+
+        return """
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        SUMMARY:Connection Praha hl.n. >> Brno hl.n.
+        END:VCALENDAR
+        """
     }
 
     func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture] {

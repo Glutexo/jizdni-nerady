@@ -6,6 +6,7 @@ import FoundationNetworking
 public protocol IDOSClienting: Sendable {
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion]
     func findConnections(request: IDOSConnectionRequest) async throws -> [IDOSConnection]
+    func connectionCalendar(for connection: IDOSConnection, timetable: IDOSTimetable) async throws -> String
     func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture]
 }
 
@@ -43,9 +44,7 @@ public struct IDOSClient: IDOSClienting {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        var body = URLComponents()
-        body.queryItems = request.formItems
-        urlRequest.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+        urlRequest.httpBody = Self.formURLEncodedData(request.formItems)
 
         let data = try await data(for: urlRequest)
         guard let html = String(data: data, encoding: .utf8) else {
@@ -53,6 +52,30 @@ public struct IDOSClient: IDOSClienting {
         }
 
         return IDOSConnectionParser.parse(html: html)
+    }
+
+    public func connectionCalendar(for connection: IDOSConnection, timetable: IDOSTimetable = .defaultTimetable) async throws -> String {
+        guard let model = connection.calendarModel, !model.isEmpty else {
+            throw IDOSError.calendarUnavailable
+        }
+
+        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        components.path = "/en/\(timetable.slug)/spojeni/kalendar"
+
+        var urlRequest = URLRequest(url: try components.requiredURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        urlRequest.httpBody = Self.formURLEncodedData([URLQueryItem(name: "model", value: model)])
+
+        let data = try await data(for: urlRequest)
+        guard let calendar = String(data: data, encoding: .utf8),
+              calendar.contains("BEGIN:VCALENDAR")
+        else {
+            throw IDOSError.invalidResponse
+        }
+
+        return calendar
     }
 
     public func findDepartures(request: IDOSDeparturesRequest) async throws -> [IDOSDeparture] {
@@ -63,9 +86,7 @@ public struct IDOSClient: IDOSClienting {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        var body = URLComponents()
-        body.queryItems = request.formItems
-        urlRequest.httpBody = body.percentEncodedQuery?.data(using: .utf8)
+        urlRequest.httpBody = Self.formURLEncodedData(request.formItems)
 
         let data = try await data(for: urlRequest)
         guard let html = String(data: data, encoding: .utf8) else {
@@ -104,6 +125,20 @@ public struct IDOSClient: IDOSClienting {
 
             task.resume()
         }
+    }
+
+    private static func formURLEncodedData(_ items: [URLQueryItem]) -> Data? {
+        items.map { item in
+            "\(formEncode(item.name))=\(formEncode(item.value ?? ""))"
+        }
+        .joined(separator: "&")
+        .data(using: .utf8)
+    }
+
+    private static func formEncode(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 }
 
@@ -541,6 +576,7 @@ public struct IDOSConnection: Codable, Equatable, Sendable {
     public var duration: String
     public var legs: [IDOSConnectionLeg]
     public var shareURL: String?
+    var calendarModel: String?
 
     public init(
         id: String,
@@ -552,6 +588,30 @@ public struct IDOSConnection: Codable, Equatable, Sendable {
         legs: [IDOSConnectionLeg],
         shareURL: String? = nil
     ) {
+        self.init(
+            id: id,
+            departureTime: departureTime,
+            departureStation: departureStation,
+            arrivalTime: arrivalTime,
+            arrivalStation: arrivalStation,
+            duration: duration,
+            legs: legs,
+            shareURL: shareURL,
+            calendarModel: nil
+        )
+    }
+
+    init(
+        id: String,
+        departureTime: String,
+        departureStation: String,
+        arrivalTime: String,
+        arrivalStation: String,
+        duration: String,
+        legs: [IDOSConnectionLeg],
+        shareURL: String? = nil,
+        calendarModel: String? = nil
+    ) {
         self.id = id
         self.departureTime = departureTime
         self.departureStation = departureStation
@@ -560,6 +620,18 @@ public struct IDOSConnection: Codable, Equatable, Sendable {
         self.duration = duration
         self.legs = legs
         self.shareURL = shareURL
+        self.calendarModel = calendarModel
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case departureTime
+        case departureStation
+        case arrivalTime
+        case arrivalStation
+        case duration
+        case legs
+        case shareURL
     }
 
     public func summaryLine(number: Int) -> String {
@@ -786,6 +858,7 @@ public enum IDOSError: LocalizedError, Sendable {
     case invalidJSONP
     case invalidTimetable(String)
     case networkUnavailable(String)
+    case calendarUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -804,6 +877,8 @@ public enum IDOSError: LocalizedError, Sendable {
             }
 
             return "Network request failed. Check your internet connection. \(detail)"
+        case .calendarUnavailable:
+            return "IDOS did not provide calendar export data for this connection."
         }
     }
 }
@@ -838,6 +913,7 @@ enum IDOSJSONP {
 
 enum IDOSConnectionParser {
     static func parse(html: String) -> [IDOSConnection] {
+        let calendarModels = calendarModels(in: html)
         let starts = RegexSupport.matches(
             pattern: #"<div id="connectionBox-([0-9]+)""#,
             in: html
@@ -849,11 +925,11 @@ enum IDOSConnectionParser {
             let end = index + 1 < starts.count ? starts[index + 1].range.location : source.length
             let block = source.substring(with: NSRange(location: start, length: end - start))
             let id = RegexSupport.capture(pattern: #"<div id="connectionBox-([0-9]+)""#, in: block) ?? ""
-            return parseConnection(id: id, block: block)
+            return parseConnection(id: id, block: block, calendarModel: calendarModels[id])
         }
     }
 
-    private static func parseConnection(id: String, block: String) -> IDOSConnection? {
+    private static func parseConnection(id: String, block: String, calendarModel: String?) -> IDOSConnection? {
         let stationRows = RegexSupport.captures(
             pattern: #"<p class="reset time[^"]*"[^>]*>(.*?)</p>\s*<p class="station"><strong class="name[^"]*">(.*?)</strong>"#,
             in: block,
@@ -909,8 +985,128 @@ enum IDOSConnectionParser {
             shareURL: HTMLText.decodeEntities(RegexSupport.capture(
                 pattern: #"data-share-url="([^"]+)""#,
                 in: block
-            ) ?? "")
+            ) ?? ""),
+            calendarModel: calendarModel
         )
+    }
+
+    private static func calendarModels(in html: String) -> [String: String] {
+        guard let result = connectionResult(from: html),
+              let connectionData = result["connData"] as? [[String: Any]],
+              let searchItem = result["searchItem"]
+        else {
+            return [:]
+        }
+
+        let shareURLs = shareURLsByConnectionID(in: html)
+        var models: [String: String] = [:]
+
+        for var connection in connectionData {
+            guard let id = connectionID(from: connection),
+                  let shareURL = shareURLs[id], !shareURL.isEmpty
+            else {
+                continue
+            }
+
+            connection["priceOffer"] = NSNull()
+            var jsConnectionData: [String: Any] = [
+                "connData": [connection],
+                "searchItem": searchItem,
+                "permanentUrl": shareURL,
+            ]
+
+            if let handle = result["handle"] {
+                jsConnectionData["handle"] = handle
+            }
+
+            let model: [String: Any] = ["jsConnData": jsConnectionData]
+            guard JSONSerialization.isValidJSONObject(model),
+                  let data = try? JSONSerialization.data(withJSONObject: model, options: []),
+                  let json = String(data: data, encoding: .utf8)
+            else {
+                continue
+            }
+
+            models[id] = json
+        }
+
+        return models
+    }
+
+    private static func connectionResult(from html: String) -> [String: Any]? {
+        guard let markerRange = html.range(of: "var connResult = new Conn.ConnResult"),
+              let objectStart = html[markerRange.upperBound...].firstIndex(of: "{"),
+              let objectEnd = matchingBrace(in: html, startingAt: objectStart)
+        else {
+            return nil
+        }
+
+        let object = String(html[objectStart...objectEnd])
+        guard let data = object.data(using: .utf8),
+              let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+
+        return result
+    }
+
+    private static func matchingBrace(in text: String, startingAt start: String.Index) -> String.Index? {
+        var index = start
+        var depth = 0
+        var quote: Character?
+        var isEscaped = false
+
+        while index < text.endIndex {
+            let character = text[index]
+
+            if let activeQuote = quote {
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == activeQuote {
+                    quote = nil
+                }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+
+            index = text.index(after: index)
+        }
+
+        return nil
+    }
+
+    private static func shareURLsByConnectionID(in html: String) -> [String: String] {
+        let matches = RegexSupport.captures(
+            pattern: #"<div id="connectionBox-([0-9]+)"[^>]*data-share-url="([^"]+)""#,
+            in: html,
+            options: [.dotMatchesLineSeparators]
+        )
+
+        return Dictionary(uniqueKeysWithValues: matches.map { match in
+            (match[0], HTMLText.decodeEntities(match[1]))
+        })
+    }
+
+    private static func connectionID(from connection: [String: Any]) -> String? {
+        if let id = connection["connId"] as? Int {
+            return String(id)
+        }
+
+        if let id = connection["connId"] as? String {
+            return id
+        }
+
+        return nil
     }
 
     private static func lineDetails(in block: String) -> [(name: String, color: String?, transportMode: IDOSTransportMode?)] {

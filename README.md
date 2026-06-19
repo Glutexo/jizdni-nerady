@@ -42,12 +42,14 @@ Departure headings use the station name resolved by IDOS, not necessarily the ex
 ### Output Format
 
 All data and alias commands support `--format text`, `--format markdown`, and `--format json`. The default is `text`.
+The `connections` command also supports `--format ics`, which prints the IDOS iCalendar file for the first returned connection.
 Unknown command-line options are rejected.
 Network failures, including missing internet connectivity, are printed as normal command errors in the selected format.
 
 ```sh
 swift run kastan suggest Praha --format json
 swift run kastan connections --from Praha --to Brno --format markdown
+swift run kastan connections --from Praha --to Brno --format ics > connection.ics
 swift run kastan departures --station "Ostrava,Hrabůvka,Benzina" --format json
 swift run kastan timetables --format json
 swift run kastan aliases list --format json
@@ -159,6 +161,7 @@ let request = IDOSConnectionRequest(
     minimumTransferTime: 10
 )
 let connections = try await client.findConnections(request: request)
+let calendar = try await client.connectionCalendar(for: connections[0], timetable: timetable)
 
 let departuresRequest = IDOSDeparturesRequest(
     timetable: timetable,
