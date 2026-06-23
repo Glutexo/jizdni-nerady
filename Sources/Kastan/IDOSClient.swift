@@ -1358,7 +1358,12 @@ enum IDOSConnectionParser {
 
             return String(block[range])
         }
-        let sources = lineBlocks.isEmpty ? headingBlocks(in: block) : lineBlocks
+        let headingCount = RegexSupport.matches(
+            pattern: #"<h3\b.*?</h3>"#,
+            in: block,
+            options: [.dotMatchesLineSeparators]
+        ).count
+        let sources = lineBlocks.count == headingCount ? lineBlocks : headingBlocks(in: block)
 
         return sources.compactMap { lineBlock in
             guard let heading = RegexSupport.matches(

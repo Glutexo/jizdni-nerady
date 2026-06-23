@@ -996,6 +996,31 @@ import Testing
     #expect(summary?.contains("Currently no delay") == true)
 }
 
+@Test func connectionParserReadsMultipleHeadingsInsideSingleLineItem() {
+    let html = """
+    <div id="connectionBox-1" class="box connection">
+      <p class="reset total">Overall time <strong>16 min</strong></p>
+      <div class="line-item">
+        <h3 title="bus (Řepiště,,U kříže >> Místek,Riviéra)" style="color: #0000FF;"><span>Bus 311</span></h3>
+        <p class="reset time " title="" >10:10</p><p class="station"><strong class="name ">Frýdek,Sportovní hala Polárka</strong></p>
+        <p class="reset time " title="" >10:13</p><p class="station"><strong class="name ">Místek,poliklinika</strong></p>
+        <h3 title="bus (Místek,poliklinika >> Místek,poliklinika)" style="color: #0000FF;"><span>Bus 310</span></h3>
+        <p class="reset time " title="" >10:15</p><p class="station"><strong class="name ">Místek,poliklinika</strong></p>
+        <p class="reset time " title="" >10:26</p><p class="station"><strong class="name ">Frýdek,magistrát</strong></p>
+      </div>
+    </div>
+    """
+
+    let connection = IDOSConnectionParser.parse(html: html).first
+    let summary = connection?.summaryLine(number: 1)
+
+    #expect(connection?.legs.map(\.name) == ["Bus 311", "Bus 310"])
+    #expect(connection?.legs.map(\.fromStation) == ["Frýdek,Sportovní hala Polárka", "Místek,poliklinika"])
+    #expect(connection?.legs.map(\.toStation) == ["Místek,poliklinika", "Frýdek,magistrát"])
+    #expect(summary?.contains("Bus 311") == true)
+    #expect(summary?.contains("Bus 310") == true)
+}
+
 @Test func connectionParserInfersTrainFromRailLinePrefix() {
     let html = """
     <div id="connectionBox-401439022" class="box connection">
