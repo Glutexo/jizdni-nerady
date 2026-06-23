@@ -173,6 +173,39 @@ import Testing
     #expect(output.contains("tariff zone P · platform 4"))
 }
 
+@Test func connectionCommandAcceptsCombinedShortFlags() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(expectedOnlyDirect: true)
+    ).output(
+        for: ["connections", "-vx", "-f", "Praha", "-t", "Brno", "-T", "vlaky", "-l", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("tariff zone P · platform 4"))
+}
+
+@Test func rootCommandAcceptsCombinedShortFlagsBeforeRoute() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(expectedOnlyDirect: true)
+    ).output(
+        for: ["-vx", "Praha", "Brno", "-T", "vlaky", "-l", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("tariff zone P · platform 4"))
+}
+
+@Test func rootCommandAcceptsCombinedShortFlagsWithValueOptionAtEnd() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(expectedOnlyDirect: true)
+    ).output(
+        for: ["-vxT", "vlaky", "Praha", "Brno", "-l", "1"]
+    )
+
+    #expect(output.contains("🧭 Connections Praha → Brno (Trains)"))
+    #expect(output.contains("tariff zone P · platform 4"))
+}
+
 @Test func connectionCommandAcceptsHyphenRouteExpression() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(
         for: ["connections", "Praha-Brno", "--timetable", "vlaky", "--limit", "1"]

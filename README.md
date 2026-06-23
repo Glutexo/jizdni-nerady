@@ -69,6 +69,7 @@ swift run kastan aliases list --format json
 ```
 
 Common options also have short switches: `-f` (`--from`), `-t` (`--to`), `-s` (`--station`), `-T` (`--timetable`), `-d` (`--date`), `-m` (`--time`), `-a` (`--arrival`), `-p` (`--departure`), `-V` (`--via`), `-x` (`--direct`), `-c` (`--add-to-calendar`), `-v` (`--verbose`), `-X` (`--max-transfers`), `-M` (`--min-transfer-time`), `-o` (`--format`), and `-l` (`--limit`).
+Short flags can be combined, for example `-vx` is the same as `-v -x`; a short option with a value can be the last item in the group, such as `-vxT odis`.
 
 Limit the number of printed results:
 

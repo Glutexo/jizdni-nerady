@@ -29,7 +29,7 @@ struct CommandRunner {
     }
 
     func output<S: Sequence<String>>(for arguments: S) async -> String {
-        let arguments = Array(arguments)
+        let arguments = CommandOptions.normalized(Array(arguments))
 
         if arguments.contains("--help") || arguments.contains("-h") {
             return helpText
@@ -1096,14 +1096,46 @@ private enum Markdown {
 }
 
 private struct CommandOptions {
+    private static let shortFlags: Set<Character> = ["h", "a", "p", "x", "c", "v"]
+    private static let shortValueOptions: Set<Character> = ["f", "t", "s", "T", "V", "d", "m", "X", "M", "o", "l"]
+
     let arguments: [String]
 
     init(_ arguments: [String]) {
-        self.arguments = arguments
+        self.arguments = Self.normalized(arguments)
+    }
+
+    static func normalized(_ arguments: [String]) -> [String] {
+        arguments.flatMap(expandedShortOptions)
     }
 
     var positional: [String] {
         positional(valueOptions: Set(arguments.filter { $0.hasPrefix("-") }))
+    }
+
+    private static func expandedShortOptions(_ argument: String) -> [String] {
+        guard argument.hasPrefix("-"),
+              !argument.hasPrefix("--"),
+              !argument.contains("="),
+              argument.count > 2,
+              !argument.dropFirst().allSatisfy(\.isNumber)
+        else {
+            return [argument]
+        }
+
+        let options = Array(argument.dropFirst())
+        guard options.indices.allSatisfy({ index in
+            let option = options[index]
+            if shortFlags.contains(option) {
+                return true
+            }
+
+            return shortValueOptions.contains(option) && index == options.count - 1
+        }) else {
+            return [argument]
+        }
+
+        return options.map { "-\($0)" }
     }
 
     func positional(valueOptions: Set<String>) -> [String] {
