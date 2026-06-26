@@ -672,6 +672,20 @@ import Testing
     #expect(emptyOutput.contains("🌰 No stop aliases saved."))
 }
 
+@Test func aliasesCommandAddsStopAliasWithPositionalStation() async throws {
+    let aliasFile = temporaryAliasFile()
+    let runner = CommandRunner(client: MockIDOSClient(), aliasFile: aliasFile)
+
+    let addOutput = await runner.output(for: [
+        "aliases", "add", "s", "Sídliště Petrovice", "--timetable", "pid",
+    ])
+
+    #expect(addOutput.contains("🌰 Alias added: s → Sídliště Petrovice (Prague + PID)"))
+
+    let listOutput = await runner.output(for: ["aliases", "list"])
+    #expect(listOutput.contains("s → Sídliště Petrovice (Prague + PID)"))
+}
+
 @Test func aliasesCommandPrintsDatabasePath() async {
     let aliasFile = temporaryAliasFile()
     let output = await CommandRunner(client: MockIDOSClient(), aliasFile: aliasFile).output(for: ["aliases", "path"])

@@ -119,6 +119,7 @@ Store personal stop aliases with the IDOS timetable they belong to:
 ```sh
 swift run kastan aliases add home --station "Frýdek,Na Veselé" --timetable odis
 swift run kastan aliases add work --station "Ostrava,Hrabůvka,Benzina" --timetable odis
+swift run kastan aliases add s "Sídliště Petrovice" --timetable pid
 swift run kastan aliases list
 swift run kastan aliases remove home
 swift run kastan aliases path

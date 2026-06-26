@@ -271,12 +271,15 @@ struct CommandRunner {
         case "add":
             try options.rejectUnknownOptions(allowedValueOptions: ["--station", "-s", "--timetable", "-T", "--format", "-o"])
             let format = try options.outputFormat()
+            let positional = options.positional
+            let station = (options.value(for: "--station", short: "-s") ?? positional.dropFirst().joined(separator: " "))
+                .trimmingCharacters(in: .whitespacesAndNewlines)
 
-            guard let name = options.positional.first, !name.isEmpty,
-                  let station = options.value(for: "--station", short: "-s"), !station.isEmpty,
+            guard let name = positional.first, !name.isEmpty,
+                  !station.isEmpty,
                   let timetableValue = options.value(for: "--timetable", short: "-T"), !timetableValue.isEmpty
             else {
-                throw CommandError.usage("Usage: kastan aliases add name --station place --timetable alias [--format text|markdown|json]")
+                throw CommandError.usage("Usage: kastan aliases add name [place|--station place] --timetable alias [--format text|markdown|json]")
             }
 
             let timetable = try IDOSTimetable.resolve(timetableValue)
