@@ -455,6 +455,18 @@ import Testing
     #expect(output.contains("❌ Error: Network request failed. Check your internet connection."))
 }
 
+@Test func connectionCommandReportsAmbiguousPlaceNames() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(suggestionResultsByPrefix: ["sí pe": ambiguousPIDStationSuggestions()])
+    ).output(
+        for: ["connections", "Santoška", "sí pe", "--timetable", "pid"]
+    )
+
+    #expect(output.contains("❌ Error: Ambiguous place name: sí pe (Prague + PID)."))
+    #expect(output.contains("1. Sídliště Petrovice - stop (Praha)"))
+    #expect(output.contains("2. Sídliště Petřiny - stop (Praha)"))
+}
+
 @Test func connectionCommandLimitsMaximumTransfers() async {
     let output = await CommandRunner(client: MockIDOSClient(expectedMaxTransfers: 0)).output(
         for: ["connections", "--from", "Praha", "--to", "Brno", "--timetable", "vlaky", "--max-transfers", "0", "--limit", "1"]
@@ -617,6 +629,18 @@ import Testing
     #expect(output.contains("❌ Error: Unknown option: --unknown."))
 }
 
+@Test func departuresCommandReportsAmbiguousStationNames() async {
+    let output = await CommandRunner(
+        client: MockIDOSClient(stationResultsByPrefix: ["sí pe": ambiguousPIDStationSuggestions()])
+    ).output(
+        for: ["departures", "sí pe", "--timetable", "pid"]
+    )
+
+    #expect(output.contains("❌ Error: Ambiguous station name: sí pe (Prague + PID)."))
+    #expect(output.contains("1. Sídliště Petrovice - stop (Praha)"))
+    #expect(output.contains("2. Sídliště Petřiny - stop (Praha)"))
+}
+
 @Test func timetablesCommandPrintsCommonAliases() async {
     let output = await CommandRunner(client: MockIDOSClient()).output(for: ["timetables"])
 
@@ -684,6 +708,22 @@ import Testing
 
     let listOutput = await runner.output(for: ["aliases", "list"])
     #expect(listOutput.contains("s → Sídliště Petrovice (Prague + PID)"))
+}
+
+@Test func aliasesCommandRejectsAmbiguousStationNames() async {
+    let aliasFile = temporaryAliasFile()
+    let runner = CommandRunner(
+        client: MockIDOSClient(stationResultsByPrefix: ["sí pe": ambiguousPIDStationSuggestions()]),
+        aliasFile: aliasFile
+    )
+
+    let output = await runner.output(for: [
+        "aliases", "add", "s", "sí pe", "--timetable", "pid",
+    ])
+
+    #expect(output.contains("❌ Error: Ambiguous station name: sí pe (Prague + PID)."))
+    #expect(output.contains("1. Sídliště Petrovice - stop (Praha)"))
+    #expect(output.contains("2. Sídliště Petřiny - stop (Praha)"))
 }
 
 @Test func aliasesCommandPrintsDatabasePath() async {
@@ -1149,21 +1189,29 @@ private struct MockIDOSClient: IDOSClienting {
     var expectedConnectionResultLimit: Int? = nil
     var validatesConnectionResultLimit = false
     var failConnectionsWithNetworkError = false
+    var connectionResults: [IDOSConnection]? = nil
     var expectedDepartureTimetable = "odis"
     var expectedStation = "Ostrava,Hrabůvka,Benzina"
     var resolvedStationName: String? = nil
     var expectedDepartureIsArrival = false
+    var departureResults: [IDOSDeparture]? = nil
+    var suggestionResultsByPrefix: [String: [IDOSSuggestion]] = [:]
+    var stationResultsByPrefix: [String: [IDOSSuggestion]] = [:]
 
     func suggest(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
-        #expect(timetable.slug == "pid")
+        if let suggestions = suggestionResultsByPrefix[prefix] {
+            return Array(suggestions.prefix(limit))
+        }
 
-        return stationSuggestions
+        return prefix == "Praha" ? Array(stationSuggestions.prefix(limit)) : []
     }
 
     func searchStations(prefix: String, limit: Int, timetable: IDOSTimetable) async throws -> [IDOSSuggestion] {
-        #expect(timetable.slug == "pid")
+        if let stations = stationResultsByPrefix[prefix] {
+            return Array(stations.prefix(limit))
+        }
 
-        return stationSuggestions
+        return prefix == "Praha" ? Array(stationSuggestions.prefix(limit)) : []
     }
 
     private var stationSuggestions: [IDOSSuggestion] {
@@ -1197,6 +1245,10 @@ private struct MockIDOSClient: IDOSClienting {
 
         if failConnectionsWithNetworkError {
             throw IDOSError.networkUnavailable("")
+        }
+
+        if let connectionResults {
+            return connectionResults
         }
 
         return [
@@ -1246,6 +1298,10 @@ private struct MockIDOSClient: IDOSClienting {
         #expect(request.station == expectedStation)
         #expect(request.isArrival == expectedDepartureIsArrival)
 
+        if let departureResults {
+            return departureResults
+        }
+
         return [
             IDOSDeparture(
                 id: "1-4286-18.06.2026 16:03:00",
@@ -1274,6 +1330,27 @@ private struct MockCalendarImporter: CalendarImporting {
 
         return URL(fileURLWithPath: path)
     }
+}
+
+private func ambiguousPIDStationSuggestions() -> [IDOSSuggestion] {
+    [
+        IDOSSuggestion(
+            selectedText: "Sídliště Petrovice",
+            text: "Sídliště Petrovice",
+            description: "stop (Praha)",
+            value: "301003",
+            value2: "6362",
+            iconId: 4
+        ),
+        IDOSSuggestion(
+            selectedText: "Sídliště Petřiny",
+            text: "Sídliště Petřiny",
+            description: "stop (Praha)",
+            value: "301003",
+            value2: "6363",
+            iconId: 15
+        ),
+    ]
 }
 
 private func jsonDictionary(_ output: String) throws -> [String: Any] {

@@ -59,7 +59,7 @@ struct CommandRunner {
             case "departures":
                 return try await departuresOutput(for: Array(arguments.dropFirst()))
             case "aliases":
-                return try aliasesOutput(for: Array(arguments.dropFirst()))
+                return try await aliasesOutput(for: Array(arguments.dropFirst()))
             case "timetables":
                 return try timetablesOutput(for: Array(arguments.dropFirst()))
             default:
@@ -151,6 +151,11 @@ struct CommandRunner {
             explicitValue: options.value(for: "--timetable", short: "-T"),
             aliases: ([fromPlace, toPlace] + viaPlaces).compactMap(\.alias)
         )
+        try await rejectAmbiguousPlaces(
+            [fromPlace, toPlace] + viaPlaces,
+            timetable: timetable,
+            stationOnly: false
+        )
 
         let request = IDOSConnectionRequest(
             timetable: timetable,
@@ -211,6 +216,7 @@ struct CommandRunner {
             explicitValue: options.value(for: "--timetable", short: "-T"),
             aliases: [stationPlace.alias].compactMap(\.self)
         )
+        try await rejectAmbiguousPlaces([stationPlace], timetable: timetable, stationOnly: true)
 
         let request = IDOSDeparturesRequest(
             timetable: timetable,
@@ -251,7 +257,7 @@ struct CommandRunner {
         return nil
     }
 
-    private func aliasesOutput(for arguments: [String]) throws -> String {
+    private func aliasesOutput(for arguments: [String]) async throws -> String {
         guard let action = arguments.first else {
             throw CommandError.usage("Usage: kastan aliases list|add|remove|path")
         }
@@ -283,6 +289,7 @@ struct CommandRunner {
             }
 
             let timetable = try IDOSTimetable.resolve(timetableValue)
+            try await rejectAmbiguousPlace(station, timetable: timetable, stationOnly: true)
             var database = try aliasFile.load()
             let action = database.alias(named: name) == nil ? "added" : "updated"
             let alias = StopAlias(name: name, station: station, timetable: timetable)
@@ -329,6 +336,40 @@ struct CommandRunner {
         }
 
         return ResolvedPlace(station: alias.station, alias: alias)
+    }
+
+    private func rejectAmbiguousPlaces(
+        _ places: [ResolvedPlace],
+        timetable: IDOSTimetable,
+        stationOnly: Bool
+    ) async throws {
+        for place in places where place.alias == nil {
+            try await rejectAmbiguousPlace(place.station, timetable: timetable, stationOnly: stationOnly)
+        }
+    }
+
+    private func rejectAmbiguousPlace(
+        _ value: String,
+        timetable: IDOSTimetable,
+        stationOnly: Bool
+    ) async throws {
+        let suggestions = stationOnly
+            ? try await client.searchStations(prefix: value, limit: 8, timetable: timetable)
+            : try await client.suggest(prefix: value, limit: 8, timetable: timetable)
+        let candidates = uniqueSuggestions(suggestions)
+        let exactMatches = candidates.filter { suggestion($0, matches: value) }
+        if exactMatches.count == 1 || candidates.count <= 1 {
+            return
+        }
+
+        throw CommandError.ambiguousPlace(
+            PlaceAmbiguity(
+                input: value,
+                timetable: timetable,
+                kind: stationOnly ? "station" : "place",
+                candidates: exactMatches.isEmpty ? candidates : exactMatches
+            )
+        )
     }
 
     private func resolveTimetable(explicitValue: String?, aliases: [StopAlias]) throws -> IDOSTimetable {
@@ -511,6 +552,7 @@ private enum CommandError: LocalizedError {
     case calendarImportUnavailable
     case unknownOption(String)
     case unsupportedOutputFormat(format: String, command: String)
+    case ambiguousPlace(PlaceAmbiguity)
     case usage(String)
 
     var errorDescription: String? {
@@ -531,6 +573,8 @@ private enum CommandError: LocalizedError {
             return "Unknown option: \(value)."
         case .unsupportedOutputFormat(let format, let command):
             return "\(format) output is not available for \(command)."
+        case .ambiguousPlace(let ambiguity):
+            return ambiguity.message
         case .usage(let message):
             return message
         }
@@ -572,7 +616,13 @@ private enum OutputFormat: String {
         case .text, .ics:
             return "❌ Error: \(message)"
         case .markdown:
-            return "> ❌ Error: \(Markdown.escape(message))"
+            let lines = message.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            guard let first = lines.first else {
+                return "> ❌ Error"
+            }
+
+            return (["> ❌ Error: \(Markdown.escape(first))"] + lines.dropFirst().map { "> \(Markdown.escape($0))" })
+                .joined(separator: "\n")
         case .json:
             return (try? JSON.write(ErrorOutput(error: message))) ?? #"{"error":"\#(message)"}"#
         }
@@ -918,16 +968,6 @@ private enum OutputFormat: String {
         }
     }
 
-    private func suggestionDetails(_ suggestion: IDOSSuggestion) -> [String] {
-        var details: [String] = []
-        for value in [suggestion.description, suggestion.region].compactMap(\.self) where !value.isEmpty {
-            if !details.contains(where: { $0.localizedCaseInsensitiveContains(value) }) {
-                details.append(value)
-            }
-        }
-        return details
-    }
-
     private func routeDescription(_ request: IDOSConnectionRequest) -> String {
         let via = request.via.isEmpty ? "" : " via \(request.via.joined(separator: ", "))"
         return "\(request.from) → \(request.to)\(via)"
@@ -1006,6 +1046,23 @@ private struct ResolvedPlace {
     var alias: StopAlias?
 }
 
+private struct PlaceAmbiguity {
+    var input: String
+    var timetable: IDOSTimetable
+    var kind: String
+    var candidates: [IDOSSuggestion]
+
+    var message: String {
+        let header = "Ambiguous \(kind) name: \(input) (\(timetable.displayName))."
+        let rows = candidates.enumerated().map { index, suggestion in
+            let detail = suggestionDetails(suggestion).joined(separator: ", ")
+            return "\(index + 1). \(suggestion.text)\(detail.isEmpty ? "" : " - \(detail)")"
+        }
+
+        return ([header, "Choose one of:"] + rows).joined(separator: "\n")
+    }
+}
+
 private struct ConnectionEndpoints {
     var from: String
     var to: String
@@ -1013,6 +1070,46 @@ private struct ConnectionEndpoints {
 
 private struct ErrorOutput: Codable {
     var error: String
+}
+
+private func uniqueSuggestions(_ suggestions: [IDOSSuggestion]) -> [IDOSSuggestion] {
+    var seen: Set<String> = []
+    return suggestions.filter { suggestion in
+        let key = [
+            normalizedSuggestionText(suggestion.text),
+            suggestion.description ?? "",
+            suggestion.region ?? "",
+            suggestion.value ?? "",
+            suggestion.value2 ?? "",
+        ].joined(separator: "|")
+
+        return seen.insert(key).inserted
+    }
+}
+
+private func suggestion(_ suggestion: IDOSSuggestion, matches value: String) -> Bool {
+    let expected = normalizedSuggestionText(value)
+    return [suggestion.selectedText, suggestion.text]
+        .compactMap(\.self)
+        .contains { normalizedSuggestionText($0) == expected }
+}
+
+private func suggestionDetails(_ suggestion: IDOSSuggestion) -> [String] {
+    var details: [String] = []
+    for value in [suggestion.description, suggestion.region].compactMap(\.self) where !value.isEmpty {
+        if !details.contains(where: { $0.localizedCaseInsensitiveContains(value) }) {
+            details.append(value)
+        }
+    }
+    return details
+}
+
+private func normalizedSuggestionText(_ value: String) -> String {
+    value
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "cs_CZ"))
+        .lowercased()
 }
 
 protocol CalendarImporting {

@@ -47,6 +47,7 @@ Connection legs also include transport emoji such as 🚆 for trains and 🚌 fo
 Connection and departure times are bold in text and markdown output.
 Use `--verbose` to show IDOS tariff zones, platforms, carriers, and current delay information when IDOS includes them.
 Departure headings use the station name resolved by IDOS, not necessarily the exact query text.
+When a connection place, departure station, or alias station is not an exact match and IDOS returns multiple candidates, Kaštan reports the ambiguous name and lists the possible IDOS choices.
 
 ### Output Format
 
